@@ -23,6 +23,12 @@ const ctx = { console, Math, Set, JSON, Uint8Array, Uint8ClampedArray, Uint8Arra
 vm.createContext(ctx);
 vm.runInContext(core + '\nglobalThis.NC = NEONCORE;', ctx);
 const NC = ctx.NC;
+/* rasterToGeoms lives in the DOM section but is pure — lift it in */
+{
+  const ra = src.indexOf('function rasterToGeoms');
+  const rb = src.indexOf('function', ra + 10);
+  vm.runInContext(src.slice(ra, rb) + '\nglobalThis.rasterToGeoms = rasterToGeoms;', ctx);
+}
 
 let passed = 0, failed = 0;
 function ok(cond, name) {
@@ -183,6 +189,30 @@ function near(a, b, eps, name) {
     near(bb.maxX, 5, 0.5, 'lens right edge x≈5');
     near(bb.maxY, 4, 0.5, 'lens top y≈4');
   }
+}
+
+/* ---------- AUTO trace mode: solid vs thin art ---------- */
+{
+  const rast = ctx.rasterToGeoms;
+  // solid fat rectangle -> auto must pick outline (medial axis would be tiny)
+  const w = 300, h = 150, rgba = new Uint8ClampedArray(w * h * 4).fill(255);
+  for (let y = 20; y < 130; y++) for (let x = 40; x < 120; x++) {
+    const p = (y * w + x) * 4; rgba[p] = 0; rgba[p + 1] = 0; rgba[p + 2] = 0; rgba[p + 3] = 255;
+  }
+  const solid = rast(rgba, w, h, { mode: 'auto', threshold: 'auto', eps: 1.2, smooth: true, minLenPx: 8, despeckle: 3 });
+  ok(ctx.NC ? true : true, 'auto ran on solid rect');
+  ok(rast.autoInfo && rast.autoInfo.mode === 'outline', 'AUTO: solid rect -> OUTLINE (stroke ~' + (rast.autoInfo ? rast.autoInfo.strokeWidthPx.toFixed(0) : '?') + 'px)');
+  ok(solid.length === 1, 'auto outline of solid rect gives 1 closed loop');
+  // thin line art -> auto must pick centerline
+  const rgba2 = new Uint8ClampedArray(w * h * 4).fill(255);
+  for (let x = 10; x < 290; x++) for (let y = 70; y < 78; y++) {
+    const p = (y * w + x) * 4; rgba2[p] = 0; rgba2[p + 1] = 0; rgba2[p + 2] = 0; rgba2[p + 3] = 255;
+  }
+  const thin = rast(rgba2, w, h, { mode: 'auto', threshold: 'auto', eps: 1.2, smooth: true, minLenPx: 5, despeckle: 3 });
+  ok(rast.autoInfo && rast.autoInfo.mode === 'center', 'AUTO: thin bar -> CENTERLINE (stroke ~' + (rast.autoInfo ? rast.autoInfo.strokeWidthPx.toFixed(0) : '?') + 'px)');
+  ok(thin.length === 1, 'auto centerline of thin bar gives 1 chain');
+  const L = thin[0].points.reduce((a, p, i) => i ? a + Math.hypot(thin[0].points[i].x - thin[0].points[i - 1].x, thin[0].points[i].y - thin[0].points[i - 1].y) : 0, 0);
+  near(L, 280, 12, 'auto centerline bar length recovered');
 }
 
 /* ---------- pieces / packing / power ---------- */

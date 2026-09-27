@@ -558,6 +558,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <div style="width:250px">
         <div class="p-row"><label>Trace mode / حالت</label>
           <select id="traceMode">
+            <option value="auto" selected>Auto — خودکار (پیشنهادی)</option>
             <option value="center">Centerline — تک‌خط (روی خود خط)</option>
             <option value="outline">Outline — دو خطی (دور خطوط)</option>
           </select>
@@ -881,14 +882,14 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <p>هر عکسی (PNG، JPG، WEBP، GIF، BMP) — لوگو، خط‌نویس، متن، طرح — را به مسیر نئون تبدیل کنید. موتور جدید به‌جای آستانهٔ ثابت، <b>آستانهٔ خودکار Otsu</b> دارد، نویز و لکه‌های ریز را حذف می‌کند، انتهای خطوط را که در اسکلت‌سازی عقب می‌مانند <b>برمی‌گرداند</b> و شاخه‌های اضافی را می‌زند:</p>
           <ol>
             <li>دکمهٔ <b>TRACE IMAGE</b> را بزنید و عکس را انتخاب کنید.</li>
-            <li><b>حالت ترسیم</b> را انتخاب کنید (جدول زیر).</li>
+            <li><b>حالت ترسیم</b> را انتخاب کنید — حالت <b>Auto</b> (پیش‌فرض) خودش تشخیص می‌دهد: اگر عکس «توپُر» باشد (لوگوی پُر، فونت فت، شکل یکپارچه) خودکار <b>Outline — دو خطی</b> را انتخاب می‌کند و اگر خط‌نویس نازک باشد <b>Centerline</b> را (جدول زیر).</li>
             <li>پیش‌نمایش قرمز <b>دقیقاً همان چیزی است</b> که روی تابلو اضافه می‌شود (WYSIWYG).</li>
             <li>اسلایدرها را تنظیم و <b>Add to design</b> را بزنید.</li>
           </ol>
           <table>
             <thead><tr><th>کنترل</th><th>کاربرد</th></tr></thead>
             <tbody>
-              <tr><td><b>Trace mode</b></td><td><b>Centerline — تک‌خط:</b> یک ریسه نئون دقیقاً روی محور خطوط عکس. <b>Outline — دو خطی:</b> ریسه از <b>دو لبهٔ هر خط</b> می‌گذرد؛ برای متن‌ها و طرح‌هایی که نمای دولاین می‌خواهید.</td></tr>
+              <tr><td><b>Trace mode</b></td><td><b>Auto (پیشنهادی):</b> نرم‌افزار ضخامت مؤثر خطوط را می‌سنجد و حالت درست را انتخاب می‌کند. <b>Centerline — تک‌خط:</b> یک ریسه نئون دقیقاً روی محور خطوط عکس (برای خط‌نویس و اسکریپت). <b>Outline — دو خطی:</b> ریسه از <b>دو لبهٔ هر خط</b> می‌گذرد؛ برای شکل‌های توپُر، متن‌های فت و نمای دولاین.</td></tr>
               <tr><td><b>Auto threshold</b></td><td>آستانهٔ سیاه/سفید خودکار (الگوریتم Otsu) — برای اکثر عکس‌ها روشن بمانید. اگر شکل ناقص/اضافی بود، تیک را بردارید و Threshold دستی را بچرخانید.</td></tr>
               <tr><td><b>Noise removal</b></td><td>حذف لکه‌ها و نقطه‌های نویز (مخصوص عکس‌های JPG و عکس‌های موبایل). 2 تا 5 مقدار خوبی است.</td></tr>
               <tr><td><b>Detail</b></td><td>ریزبینی. کمتر = خطوط نرم‌تر و تمیزتر. بیشتر = جزئیات بیشتر (و شلوغ‌تر).</td></tr>
@@ -897,7 +898,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
               <tr><td><b>Invert</b></td><td>وقتی شکل روشن روی پس‌زمینهٔ تیره است تیک بزنید.</td></tr>
             </tbody>
           </table>
-          <div class="tip">اگر قبلاً «تشخیص نمی‌داد»: حالا آستانه خودکار + حذف نویز + برگرداندن نوک خطوط اضافه شده. عکس پرکنتراست بهترین نتیجه را می‌دهد ولی عکس‌های معمولی هم حالا کار می‌کنند. اگر باز هم خطی جا افتاد، Quality را بالا ببرید و Noise removal را کم کنید.</div>
+          <div class="tip">اگر قبلاً «تشخیص نمی‌داد»: مشکل اصلی این بود که اسکلت‌سازی برای شکل‌های <b>توپُر</b> فقط یک خط کوچک وسط شکل می‌دهد (برای دایرهٔ توپُر فقط یک نقطه!) — حالا حالت <b>Auto</b> چنین عکس‌هایی را می‌شناسد و خودکار به Outline می‌برد. به‌علاوه: آستانهٔ خودکار Otsu + فیلتر میانه برای نویز عکس + برگرداندن نوک خطوط + اتصال ترک‌های ریز. اگر باز هم خطی جا افتاد، Quality را بالا ببرید و Noise removal را کم کنید.</div>
         </section>
 
         <section id="hs7b">
@@ -1630,15 +1631,18 @@ function flattenPath(path, step) {
      'center'  -> binarize + Zhang-Suen skeleton + centerline chains (neon on the stroke axis)
      'outline' -> binarize + marching-squares contour tracing (neon follows BOTH edges of
                   every stroke = the double-line / outline look used on real neon signs) */
-function binarize(rgba, w, h, threshold, invert) {
+function binarize(rgba, w, h, threshold, invert, lum) {
   /* threshold === 'auto' -> Otsu (computed once from the histogram) */
   if (threshold === 'auto' || threshold === null || threshold === undefined) {
-    threshold = otsuThreshold(rgba, w, h);
+    threshold = otsuLum(lum || imgLuminance(rgba, w, h));
   }
-  var bin = new Uint8Array(w * h);
-  for (var i = 0, p = 0; i < bin.length; i++, p += 4) {
-    var lum = 0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2];
-    var on = lum < threshold;
+  return binarizeLum(lum || imgLuminance(rgba, w, h), threshold, invert);
+}
+/* binarize a luminance map: ON = ink (darker than threshold) */
+function binarizeLum(lum, threshold, invert) {
+  var bin = new Uint8Array(lum.length);
+  for (var i = 0; i < bin.length; i++) {
+    var on = lum[i] < threshold;
     if (invert) on = !on;
     bin[i] = on ? 1 : 0;
   }
@@ -1646,14 +1650,23 @@ function binarize(rgba, w, h, threshold, invert) {
 }
 /* ---- Otsu automatic threshold (between background and ink) ---- */
 function otsuThreshold(rgba, w, h) {
+  return otsuLum(imgLuminance(rgba, w, h));
+}
+/* luminance byte map of an RGBA buffer */
+function imgLuminance(rgba, w, h) {
+  var n = w * h, lum = new Uint8Array(n);
+  for (var i = 0, p = 0; i < n; i++, p += 4) {
+    var v = (0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2]) | 0;
+    lum[i] = v < 0 ? 0 : (v > 255 ? 255 : v);
+  }
+  return lum;
+}
+/* Otsu on a luminance map */
+function otsuLum(lum) {
   var hist = new Array(256);
   for (var i = 0; i < 256; i++) hist[i] = 0;
-  var n = w * h, p = 0;
-  for (var k = 0; k < n; k++, p += 4) {
-    var lum = (0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2]) | 0;
-    if (lum < 0) lum = 0; else if (lum > 255) lum = 255;
-    hist[lum]++;
-  }
+  var n = lum.length;
+  for (var k = 0; k < n; k++) hist[lum[k]]++;
   var sum = 0;
   for (var t2 = 0; t2 < 256; t2++) sum += t2 * hist[t2];
   var sumB = 0, wB = 0, best = 0, thr = 128;
@@ -1669,6 +1682,82 @@ function otsuThreshold(rgba, w, h) {
   }
   /* nudge slightly toward the ink side for noisy JPEGs */
   return Math.min(254, Math.max(2, thr + 6));
+}
+/* morphological 3x3 dilate / erode / close on a binary mask */
+function dilate3(bin, w, h) {
+  var out = new Uint8Array(bin.length);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var on = 0;
+      for (var dy = -1; dy <= 1 && !on; dy++) {
+        var yy = y + dy;
+        if (yy < 0 || yy >= h) continue;
+        for (var dx = -1; dx <= 1; dx++) {
+          var xx = x + dx;
+          if (xx < 0 || xx >= w) continue;
+          if (bin[yy * w + xx]) { on = 1; break; }
+        }
+      }
+      out[y * w + x] = on;
+    }
+  }
+  return out;
+}
+function erode3(bin, w, h) {
+  var out = new Uint8Array(bin.length);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var all = 1;
+      for (var dy = -1; dy <= 1 && all; dy++) {
+        var yy = y + dy;
+        if (yy < 0 || yy >= h) { all = 0; break; }
+        for (var dx = -1; dx <= 1; dx++) {
+          var xx = x + dx;
+          if (xx < 0 || xx >= w) { all = 0; break; }
+          if (!bin[yy * w + xx]) { all = 0; break; }
+        }
+      }
+      out[y * w + x] = all;
+    }
+  }
+  return out;
+}
+/* closing = dilate then erode: bridges small gaps/cracks in strokes
+   (noisy photos make strokes crack; closing reconnects them) */
+function closeBin(bin, w, h, iters) {
+  var b = bin;
+  for (var i = 0; i < (iters || 1); i++) {
+    b = erode3(dilate3(b, w, h), w, h);
+  }
+  return b;
+}
+/* 3x3 median filter on a luminance map — kills per-pixel photo/JPEG noise
+   BEFORE binarization (salt-and-pepper would otherwise become fake strokes). */
+function medianLum3(lum, w, h) {
+  var out = new Uint8Array(lum.length);
+  var win = new Array(9);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var k = 0;
+      for (var dy = -1; dy <= 1; dy++) {
+        var yy = y + dy;
+        if (yy < 0) yy = 0; else if (yy >= h) yy = h - 1;
+        for (var dx = -1; dx <= 1; dx++) {
+          var xx = x + dx;
+          if (xx < 0) xx = 0; else if (xx >= w) xx = w - 1;
+          win[k++] = lum[yy * w + xx];
+        }
+      }
+      /* insertion sort of 9 items, take middle */
+      for (var a = 1; a < 9; a++) {
+        var v = win[a], b = a - 1;
+        while (b >= 0 && win[b] > v) { win[b + 1] = win[b]; b--; }
+        win[b + 1] = v;
+      }
+      out[y * w + x] = win[4];
+    }
+  }
+  return out;
 }
 /* ---- despeckle: drop connected ON components smaller than minPx pixels ---- */
 function removeSmallComponents(bin, w, h, minPx) {
@@ -2223,6 +2312,8 @@ var NEONCORE = {
   binarize: binarize, zhangSuen: zhangSuen, traceSkeleton: traceSkeleton,
   catmullCtrl: catmullCtrl, chainsToPaths: chainsToPaths, fitPathsToBoard: fitPathsToBoard,
   otsuThreshold: otsuThreshold, removeSmallComponents: removeSmallComponents,
+  imgLuminance: imgLuminance, otsuLum: otsuLum, medianLum3: medianLum3, binarizeLum: binarizeLum,
+  dilate3: dilate3, erode3: erode3, closeBin: closeBin,
   pruneSpurs: pruneSpurs, traceContours: traceContours, loopsToGeoms: loopsToGeoms,
   extendChainEnds: extendChainEnds,
   catmullCtrlClosed: catmullCtrlClosed, fillPolyMask: fillPolyMask,
@@ -4584,11 +4675,43 @@ function geomSmiley(cx, cy, r) {
 /* ---- raster (image / text) -> neon geoms, v2: centerline OR outline mode ---- */
 function rasterToGeoms(rgba, w, h, opts) {
   opts = opts || {};
-  var mode = opts.mode || 'center';
+  var mode = opts.mode || 'auto';
+  /* noise removal: median pre-filter kills photo/JPEG grain BEFORE thresholding */
+  var lum = imgLuminance(rgba, w, h);
+  var noise = opts.despeckle || 0;
+  if (noise > 0) {
+    lum = medianLum3(lum, w, h);
+    if (noise >= 6) lum = medianLum3(lum, w, h); /* heavy noise -> second pass */
+  }
   var bin = binarize(rgba, w, h,
     (opts.threshold === undefined || opts.threshold === null) ? 'auto' : opts.threshold,
-    !!opts.invert);
-  if (opts.despeckle) bin = removeSmallComponents(bin, w, h, opts.despeckle * opts.despeckle);
+    !!opts.invert, lum);
+  if (noise) {
+    bin = removeSmallComponents(bin, w, h, noise * noise);
+  }
+  /*
+    AUTO mode — estimate the effective stroke width from the contours:
+    for a ribbon of width t:  Area = t*L, Perimeter ~= 2L  =>  t ~= 2*Area/Perimeter.
+    Works for rings too (donut: t = R - r).  Solid shapes / fat fonts / filled
+    logos give a big t -> OUTLINE (double-line) is the right neon rendering.
+    Thin line art and script give a small t -> CENTERLINE.
+  */
+  rasterToGeoms.autoInfo = null;
+  if (mode === 'auto') {
+    var ink = 0, i0;
+    for (i0 = 0; i0 < bin.length; i0++) if (bin[i0]) ink++;
+    var probe = traceContours(bin, w, h), per = 0, li, lj;
+    for (li = 0; li < probe.length; li++) {
+      var lp = probe[li].pts;
+      for (lj = 1; lj < lp.length; lj++) per += dist(lp[lj - 1], lp[lj]);
+      if (lp.length > 1) per += dist(lp[lp.length - 1], lp[0]);
+    }
+    var wEff = 2 * ink / Math.max(per, 1);
+    var solidLimit = Math.max(18, 0.03 * Math.max(w, h));
+    mode = (wEff > solidLimit) ? 'outline' : 'center';
+    rasterToGeoms.autoInfo = { mode: mode, strokeWidthPx: wEff, solidLimit: solidLimit };
+  }
+  if (noise && mode !== 'outline') bin = closeBin(bin, w, h, 1); /* reconnect cracked strokes */
   if (mode === 'outline') {
     var loops = traceContours(bin, w, h);
     return loopsToGeoms(loops, {
@@ -4883,7 +5006,7 @@ function traceScaledData(maxDim) {
 function traceOpts() {
   var auto = $('traceAuto') ? $('traceAuto').checked : true;
   return {
-    mode: ($('traceMode') && $('traceMode').value) || 'center',
+    mode: ($('traceMode') && $('traceMode').value) || 'auto',
     threshold: auto ? 'auto' : parseFloat($('traceThresh').value),
     invert: $('traceInvert').checked,
     eps: Math.max(0.4, parseFloat($('traceDetail').value) / 4),
@@ -4915,8 +5038,14 @@ function traceCompute() {
       TRACE.geoms = rasterToGeoms(t.data, t.w, t.h, traceOpts());
       TRACE.dirty = false;
       drawTracePreview();
+      var autoNote = '';
+      if (rasterToGeoms.autoInfo) {
+        autoNote = rasterToGeoms.autoInfo.mode === 'outline'
+          ? ' — AUTO picked OUTLINE (دو خطی): solid/fat shapes detected (stroke ≈ ' + Math.round(rasterToGeoms.autoInfo.strokeWidthPx) + 'px)'
+          : ' — AUTO picked CENTERLINE (تک‌خط): thin line-art detected (stroke ≈ ' + Math.round(rasterToGeoms.autoInfo.strokeWidthPx) + 'px)';
+      }
       traceStatus('✔ <b>' + TRACE.geoms.length + '</b> neon path(s) — ' +
-        t.w + '×' + t.h + ' px — preview = exact result', 'ok');
+        t.w + '×' + t.h + ' px — preview = exact result' + autoNote, 'ok');
     } catch (e) {
       traceStatus('Error: ' + esc(e.message), 'err');
     }
@@ -4987,8 +5116,10 @@ function applyTrace() {
       for (var k = 0; k < wrapped.length; k++) S.project.paths.push(wrapped[k]);
       $('modalTrace').classList.add('hidden');
       recompute();
+      var usedMode = ($('traceMode') && $('traceMode').value) || 'auto';
+      if (usedMode === 'auto' && rasterToGeoms.autoInfo) usedMode = rasterToGeoms.autoInfo.mode;
       setStatus('Traced ' + wrapped.length + ' neon path(s) from image (' +
-        (($('traceMode') && $('traceMode').value === 'outline') ? 'OUTLINE / double-line' : 'centerline') +
+        (usedMode === 'outline' ? 'OUTLINE / double-line — دو خطی' : 'centerline — تک‌خط') +
         ') — lengths corrected to the ' + fmt(S.project.profile.intervalCm) +
         ' cm cutting grid. Use CUT DXF for the machine.', 'ok');
     } catch (e) {
