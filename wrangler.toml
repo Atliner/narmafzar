@@ -1,0 +1,10 @@
+# Cloudflare Workers configuration — single-file Worker.
+# Connect this GitHub repo to Cloudflare (Workers Builds / Git integration):
+# every push to main is deployed automatically. No build command needed.
+name = "narmafzar"
+main = "worker.js"
+compatibility_date = "2026-09-27"
+workers_dev = true
+
+[observability]
+enabled = true
