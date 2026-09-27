@@ -254,6 +254,7 @@ try {
   ok(window.S.pieces.every((p) => p.pathId !== firstPath.id), 'hidden path excluded from cut list & power');
 
   /* ---- exports ---- */
+  window.S.project.holes = [{ id: 'h1', x: 8, y: 8, diameterMm: 4 }];
   downloads.length = 0;
   window.exportSVG();
   window.exportEPS();
@@ -261,13 +262,21 @@ try {
   window.exportDXF();
   window.exportCutSvg();
   window.exportCutDxf();
-  ok(downloads.length === 6, 'exports produced 6 downloads');
+  window.exportPlexiSvg();
+  window.exportPlexiDxf();
+  ok(downloads.length === 8, 'exports produced 8 downloads (including CHANNEL + PLEXI)');
   const eps = downloads[1];
   let epsText = '';
   if (typeof eps.text === 'function') epsText = await eps.text();
   else epsText = String(await new Promise((res) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsText(eps); }));
   ok(epsText.indexOf('%!PS-Adobe-3.0 EPSF-3.0') === 0, 'EPS header correct');
   ok(epsText.indexOf('%%EOF') > 0, 'EPS has EOF marker');
+  const plexiSvg = downloads[6];
+  let plexiText = '';
+  if (typeof plexiSvg.text === 'function') plexiText = await plexiSvg.text();
+  else plexiText = String(await new Promise((res) => { const fr = new window.FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => res(''); fr.readAsText(plexiSvg); }));
+  ok(plexiText.indexOf('data-layer="PLEXI_CUT"') > 0, 'PLEXI SVG contains the welded laser-cut layer');
+  ok(plexiText.indexOf('data-layer="PLEXI_HOLES"') > 0, 'PLEXI SVG contains mounting holes on a separate layer');
 
   /* ---- checks ---- */
   window.runChecks();

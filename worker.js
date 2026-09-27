@@ -3,11 +3,10 @@
 // Single-file Cloudflare Worker — serves the complete client-side app.
 // All geometry, cut-list, power and bin-packing processing runs in the browser.
 // No build step, no external dependencies. See docs/DESIGN.md and README.md.
-// Build marker: v2.0.0 (2026-09-27) — TRACE v2 (Otsu + despeckle + tip recovery
+// Build marker: v2.1.0 (2026-09-28) — TRACE v2 (Otsu + despeckle + tip recovery
 // + OUTLINE double-line mode), real NEON TEXT tool (fa/en, fonts, single/double
-// line), CorelDRAW-style toolkit (shapes, transform handles, align/distribute,
-// order, boolean weld/trim/intersect, double-line transform, colors, objects
-// manager, zoom/fit, EPS export).
+// line), CorelDRAW-style toolkit, flex-channel export, and welded rounded PLEXI
+// contour/export matching the fabrication workflow shown in the user samples.
 // =============================================================================
 
 const HTML_PAGE = `<!DOCTYPE html>
@@ -287,8 +286,10 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <button id="expJson" class="btn sm" title="Export project JSON">JSON</button>
     </div>
     <div class="export-group">
-      <button id="expCutDxf" class="btn sm accent" title="CUT FILE for the cutting machine — double-line channel (DXF)">CUT DXF</button>
-      <button id="expCutSvg" class="btn sm accent" title="CUT FILE for the cutting machine — double-line channel (SVG)">CUT SVG</button>
+      <button id="expCutDxf" class="btn sm accent" title="Flex channel — two cutting edges around the neon route (DXF)">CHANNEL DXF</button>
+      <button id="expCutSvg" class="btn sm accent" title="Flex channel — two cutting edges around the neon route (SVG)">CHANNEL SVG</button>
+      <button id="expPlexiDxf" class="btn sm primary" title="Welded outer contour for cutting the acrylic backer (DXF)">PLEXI DXF</button>
+      <button id="expPlexiSvg" class="btn sm primary" title="Welded outer contour for cutting the acrylic backer (SVG)">PLEXI SVG</button>
     </div>
     <div class="sep"></div>
     <button id="btnSave" class="btn sm" title="Save project in browser">SAVE</button>
@@ -317,9 +318,11 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <div class="tool" id="toolTrace2"><span class="ico">&#128444;</span>Trace Img</div>
       <div class="tool" data-tool="split"><span class="ico">&#9986;</span>Split</div>
       <div class="tool" data-tool="measure"><span class="ico">&#8646;</span>Measure</div>
+      <div class="tool" data-tool="hole" title="Click to add a mounting/drill hole for the acrylic backer"><span class="ico">&#8857;</span>Mount Hole</div>
       <div class="tool-h">EDIT</div>
       <div class="tool" id="toolSnap"><span class="ico">&#8862;</span>Snap Grid</div>
-      <div class="tool" id="toolChannel"><span class="ico">&#8741;</span>Channel</div>
+      <div class="tool" id="toolChannel" title="Preview the two edges of the flex channel"><span class="ico">&#8741;</span>Flex Channel</div>
+      <div class="tool" id="toolPlexi" title="Preview the welded acrylic backer cutting contour"><span class="ico">&#11042;</span>Plexi Outline</div>
       <div class="tool" id="toolSnapLen"><span class="ico">&#8776;</span>Snap Lengths</div>
       <div class="tool" id="toolReverse"><span class="ico">&#8644;</span>Reverse</div>
       <div class="tool" id="toolDelete"><span class="ico">&#10006;</span>Delete</div>
@@ -397,10 +400,16 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <div class="unit"><input id="propGrid" type="number" min="0.1" step="0.1" value="0.5"><i>cm</i></div></div>
         <div class="p-row"><label>Node Tolerance</label>
           <div class="unit"><input id="propNodeTol" type="number" min="0.05" step="0.05" value="0.5"><i>cm</i></div></div>
-        <div class="p-row"><label>Cutting Channel Width</label>
+        <div class="p-row"><label>Flex Channel Width</label>
           <div class="unit"><input id="propChannel" type="number" min="1" step="0.5" value="10"><i>mm</i></div></div>
+        <div class="p-row"><label>Plexi Outer Margin</label>
+          <div class="unit"><input id="propPlexiMargin" type="number" min="0" step="0.5" value="10"><i>mm</i></div></div>
+        <div class="p-row"><label>Mount Hole Diameter</label>
+          <div class="unit"><input id="propHoleDia" type="number" min="1" step="0.5" value="4"><i>mm</i></div></div>
       </div>
-      <div class="p-row"><label><input id="chkCutCenter" type="checkbox"> Include centerline in cutter files</label></div>
+      <div class="p-row"><label><input id="chkCutCenter" type="checkbox"> Include neon guide/centerline in cutter files</label></div>
+      <div class="p-actions"><button id="btnClearHoles" class="btn sm">Clear Mount Holes</button></div>
+      <p class="hint">CHANNEL exports two rails around each neon route. PLEXI exports welded, rounded backing contours plus mounting holes, like the red CorelDRAW contour in fabrication tutorials.</p>
       <div class="p-actions">
         <button id="btnAutoAll" class="btn sm primary">AUTO: Snap + Build Cut List</button>
       </div>
@@ -706,7 +715,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
             <li>در حالت <b>AUTO MODE</b> نرم‌افزار خودکار شماره‌گذاری (NEON 01...) می‌کند و طول هر مسیر را <b>هندسیاً</b> اصلاح می‌کند تا مضرب 2.5 سانتی‌متر شود.</li>
             <li>جدول برش پایین صفحه را بررسی کنید (شماره، طول، تعداد برش، شروع، پایان).</li>
             <li>دکمهٔ <b>CHECK DESIGN</b> را بزنید و همهٔ هشدارها را برطرف کنید.</li>
-            <li>برای ساخت تابلو، <b>CUT DXF</b> (فایل برش‌دهنده) و <b>PRINT / PDF</b> (برگهٔ ساخت) را دانلود کنید.</li>
+            <li>برای ساخت تابلو، بر حسب روش تولید <b>CHANNEL DXF</b> (شیار دو لبه) یا <b>PLEXI DXF</b> (دوربُر ورق پلکسی مانند خط قرمز CorelDRAW) و سپس <b>PRINT / PDF</b> را دانلود کنید.</li>
             <li>متراژ و توان لازم را از تب <b>MATERIALS &amp; POWER</b> بردارید و منبع تغذیه مناسب بخرید.</li>
           </ol>
           <div class="tip">نکتهٔ طلایی: نرم‌افزار هیچ‌وقت طول را «فقط گرد نمی‌کند». اگر مسیری 83.2 سانت باشد، هندسهٔ آن را طوری تغییر می‌دهد که طول واقعی به 85 سانت (34 × 2.5) برسد و شکل تا حد امکان حفظ شود. به همین دلیل همهٔ نقاط START و END روی نقاط برش واقعی نئون می‌نشینند.</div>
@@ -723,7 +732,8 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
               <tr><td><b>CHECK DESIGN</b></td><td>بررسی کامل طرح قبل از خروجی گرفتن — بخش ۹ را ببینید.</td></tr>
               <tr><td><b>PRINT / PDF</b></td><td>برگهٔ ساخت: جدول برش + محاسبهٔ برق + پرت رول + نقشهٔ طرح. در پنجرهٔ چاپ مرورگر گزینهٔ Save as PDF را بزنید.</td></tr>
               <tr><td><b>SVG / DXF / PNG / CSV / JSON</b></td><td>خروجی‌های معمول طرح (بخش ۸). CSV همان جدول برش است.</td></tr>
-              <tr><td><b>CUT DXF / CUT SVG</b></td><td><b>مهم‌ترین خروجی برای ساخت:</b> فایل «طرح دوبل» برای برش‌دهنده (بخش ۸).</td></tr>
+              <tr><td><b>CHANNEL DXF/SVG</b></td><td>دو لبهٔ شیار نئون با عرض واقعی؛ مناسب CNC/روتر.</td></tr>
+              <tr><td><b>PLEXI DXF/SVG</b></td><td>کانتور بیرونیِ یکپارچه و Weldشده برای دوربُر ورق پلکسی؛ مطابق نمونهٔ قرمز CorelDRAW (بخش ۸).</td></tr>
               <tr><td><b>TRACE IMAGE</b></td><td>تبدیل خودکار عکس به مسیر نئون — بخش ۷.</td></tr>
               <tr><td><b>EXAMPLES</b></td><td>بارگذاری نمونه‌های حرفه‌ای: تابلوی کافه (دایره + نوشتهٔ فارسی نئون)، گالری اشکال، یا دموی زنجیره‌ای جدول برش.</td></tr>
               <tr><td><b>SAVE / OPEN</b></td><td>ذخیره و باز کردن پروژه داخل همین مرورگر (بخش ۱۱).</td></tr>
@@ -756,6 +766,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <ul>
             <li><b>Text (متن نئونی)</b> — کلیک کنید؛ پنجرهٔ TEXT باز می‌شود: متن فارسی/انگلیسی بنویسید، فونت و اندازه انتخاب کنید و <b>متن به مسیر واقعی نئون تبدیل می‌شود</b> (در جدول برش می‌آید و قابل خروجی گرفتن است). حالت <b>Centerline</b> = یک ریسه روی خود خطوط حروف؛ حالت <b>Outline — دو خطی</b> = ریسه از <b>دو طرف خطوط حروف</b> می‌گذرد (نمای دوخطی). اگر تیک «note/label only» را بزنید، متن فقط به‌صورت برچسب چاپی روی تابلو می‌نشیند (نئون نیست).</li>
             <li><b>Trace Img</b> — مثل دکمهٔ TRACE IMAGE بالای صفحه؛ آپلود عکس و تبدیل به نئون (بخش ۷).</li>
+            <li><b>Mount Hole</b> — روی تابلو کلیک کنید تا سوراخ نصب/پیچ پلکسی با قطر تنظیم‌شده اضافه شود؛ سوراخ‌ها در لایهٔ PLEXI_HOLES خروجی می‌روند.</li>
           </ul>
           <h4>چیدمان و ترتیب (ARRANGE)</h4>
           <ul>
@@ -776,7 +787,8 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <h4>ابزارهای ویرایش</h4>
           <ul>
             <li><b>Snap Grid</b> — چسباندن نقاط به گرید (اندازهٔ گرید در PROPERTIES). فعال/غیرفعال.</li>
-            <li><b>Channel</b> — نمایش «طرح دوبل»: دو خط موازی اطراف هر مسیر که نشان می‌دهد برش‌دهنده کجاها را می‌برد و ریسه نئون کجا می‌نشیند.</li>
+            <li><b>Flex Channel</b> — نمایش دو لبهٔ موازی شیار با عرض واقعی؛ این دو خط «نئون اضافه» نیستند.</li>
+            <li><b>Plexi Outline</b> — نمایش کانتور قرمز، گرد و یکپارچهٔ دورِ کل طرح برای دوربُر ورق پلکسی؛ تقاطع‌ها و مسیرهای نزدیک خودکار Weld می‌شوند.</li>
             <li><b>Snap Lengths</b> — اصلاح هندسی طول همهٔ مسیرها تا مضرب گام برش شوند (در AUTO خودکار است؛ این دکمه برای MANUAL).</li>
             <li><b>Reverse</b> — تغییر جهت مسیر انتخاب‌شده (نقطهٔ شروع و پایان عوض می‌شود).</li>
             <li><b>Delete</b> — حذف مسیر انتخاب‌شده (کلید Delete هم همین کار را می‌کند).</li>
@@ -802,7 +814,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
             <li><b>NEON 01, NEON 02, ...</b> — شمارهٔ هر مسیر نئون (وسط مسیر).</li>
             <li><b>START 01 / END 01</b> — نقطهٔ شروع (سبز) و پایان (قرمز) هر قطعهٔ قابل برش.</li>
             <li><b>A , B , C , ...</b> — حروف نقاط اتصال: جایی که دو مسیر به هم می‌رسند یا انتهای آزاد هستند. همین حروف در جدول برش در ستون «شروع/پایان» می‌آیند.</li>
-            <li>خطوط سفید چین‌دار = انتخاب فعلی شما؛ خطوط سفید نازک اطراف مسیر (در حالت Channel) = خطوط برش.</li>
+            <li>خطوط سفید نازک اطراف مسیر در حالت Flex Channel = دو لبهٔ شیار؛ خط قرمز چین‌دار در حالت Plexi Outline = لبهٔ نهایی دوربُر ورق پلکسی.</li>
           </ul>
         </section>
 
@@ -838,8 +850,10 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
               <tr><td>PSU Capacity</td><td>اگر منبع تغذیهٔ مشخصی دارید توانش را وارد کنید (وات) تا با توان کل مقایسه شود. 0 = پیشنهاد خودکار.</td></tr>
               <tr><td>Grid Snap</td><td>گام چسباندن نقاط هنگام ترسیم (سانتی‌متر، پیش‌فرض 0.5).</td></tr>
               <tr><td>Node Tolerance</td><td>تلورانس یکی‌شدن دو نقطهٔ انتهایی به‌عنوان «نقطهٔ اتصال» (سانتی‌متر).</td></tr>
-              <tr><td>Cutting Channel Width</td><td>عرض <b>کانال برش</b> (میلی‌متر). طرح دوبل با همین عرض اطراف مسیر ساخته می‌شود؛ پیش‌فرض 10 = نئون 8mm + خلاصی 2mm.</td></tr>
-              <tr><td>Include centerline</td><td>اگر تیک بخورید، مرکزخط مسیر هم به فایل برش‌دهنده اضافه می‌شود.</td></tr>
+              <tr><td>Flex Channel Width</td><td>عرض <b>شیار/کانال</b> (میلی‌متر). دو لبه با همین فاصله ساخته می‌شوند؛ پیش‌فرض 10 = نئون 8mm + خلاصی 2mm.</td></tr>
+              <tr><td>Plexi Outer Margin</td><td>فاصلهٔ آزاد از لبهٔ ریسه تا خط دوربُر پلکسی. نرم‌افزار نصف عرض نئون را هم خودکار حساب می‌کند، گوشه‌ها را گرد می‌سازد و هم‌پوشانی‌ها را Weld می‌کند.</td></tr>
+              <tr><td>Mount Hole Diameter</td><td>قطر سوراخ‌های نصب/پیچ. ابزار Mount Hole با هر کلیک یک سوراخ می‌گذارد؛ Clear Mount Holes همه را پاک می‌کند.</td></tr>
+              <tr><td>Include neon guide</td><td>اگر تیک بخورد، مرکزخط نصب نئون با لایهٔ جداگانه به فایل‌های CHANNEL/PLEXI اضافه می‌شود.</td></tr>
             </tbody>
           </table>
           <h4>پنل مسیر انتخاب‌شده</h4>
@@ -899,6 +913,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
             </tbody>
           </table>
           <div class="tip">اگر قبلاً «تشخیص نمی‌داد»: مشکل اصلی این بود که اسکلت‌سازی برای شکل‌های <b>توپُر</b> فقط یک خط کوچک وسط شکل می‌دهد (برای دایرهٔ توپُر فقط یک نقطه!) — حالا حالت <b>Auto</b> چنین عکس‌هایی را می‌شناسد و خودکار به Outline می‌برد. به‌علاوه: آستانهٔ خودکار Otsu + فیلتر میانه برای نویز عکس + برگرداندن نوک خطوط + اتصال ترک‌های ریز. اگر باز هم خطی جا افتاد، Quality را بالا ببرید و Noise removal را کم کنید.</div>
+          <div class="warn">عکس نهایی تابلو روی دیوار (مثل تصویر بستنی با آجر، هالهٔ نور و واترمارک) مرجع مناسبی برای Trace دقیق نیست؛ موتور ممکن است آجر و هاله را هم مسیر بگیرد. برای فایل تولید، تصویر خطی/لوگوی تمیز با پس‌زمینهٔ ساده بهترین ورودی است. برای طرح روشن روی زمینهٔ تیره حتماً Invert را فعال کنید.</div>
         </section>
 
         <section id="hs7b">
@@ -919,7 +934,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <div class="tip">برای متن‌های خیلی نازک (فونت‌های Light) تیک <b>Thicken</b> را بزنید تا خطوط حروف کمی قطورتر رسم و پایدارتر ترسیم شوند. اگر متن از عرض تابلو بیرون بزند خودکار کوچک می‌شود.</div>
           <h4>دو خطی‌کردن هر طرح (نه فقط متن)</h4>
           <p>هر مسیر دلخواه (دست‌کشیده، تریس‌شده، شکل) را انتخاب کنید و <b>Double Line</b> را بزنید: مسیر به دو خط نئون موازی تبدیل می‌شود. فاصلهٔ دو خط در PROPERTIES → «Double-line gap» تنظیم می‌شود. اگر بخواهید خط وسط هم بماند، در پیام دکمه Cancel را بزنید (۳ مسیر می‌سازد).</p>
-          <div class="warn">حالت Outline/دو خطی و ابزار Double Line هر دو «ریسهٔ دوخطی واقعی» می‌سازند؛ ولی <b>CHANNEL</b> (دو خط چین‌دار دور مسیر) فقط «خطوط برش کانال» برای برش‌دهنده است — با ریسه اشتباه نشود!</div>
+          <div class="warn"><b>سه مفهوم جدا:</b> (۱) Outline/Double Line = دو مسیر نئون واقعی و در متراژ/برق حساب می‌شوند؛ (۲) Flex Channel = دو لبهٔ شیار و نئون اضافه نیست؛ (۳) Plexi Outline = فقط خط قرمز دوربُر ورق پلکسی مانند تصاویر ارسالی. این جداسازی جلوی دوبار حساب‌شدن متراژ را می‌گیرد.</div>
         </section>
 
         <section id="hs7c">
@@ -937,26 +952,33 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
               <tr><td>Boolean (Shaping)</td><td>Weld (جوش/ادغام)، Trim (برش)، Intersect (اشتراک) — مثل Shaping در CorelDRAW.</td></tr>
               <tr><td>Duplicate / Copy / Paste</td><td>Ctrl+D / Ctrl+C / Ctrl+V و Select All با Ctrl+A.</td></tr>
               <tr><td>Artistic Text</td><td>متن با فونت دلخواه → تبدیل به مسیر برداری نئون (بخش ۷ب).</td></tr>
-              <tr><td>Outline / Contour</td><td>Double Line = آفست موازی دوطرفه؛ CHANNEL = کانال برش دوخطی.</td></tr>
+              <tr><td>Outline / Contour</td><td>Double Line = دو نئون موازی؛ Flex Channel = دو لبهٔ شیار؛ Plexi Outline = کانتور Weldشدهٔ بیرونی مانند Contour در CorelDRAW.</td></tr>
               <tr><td>Object Manager</td><td>تب OBJECTS: فهرست همهٔ اشیا + نمایش/مخفی (👁) + قفل (🔒) + حذف. مسیر مخفی از جدول برش و خروجی‌ها حذف می‌شود (برای طرح مرجع).</td></tr>
               <tr><td>Color</td><td>رنگ نئون هر مسیر (پالت + رنگ دلخواه) — روی بوم، SVG، PNG و EPS اعمال می‌شود.</td></tr>
               <tr><td>Zoom / Fit</td><td>بزرگ/کوچک/تناسب با صفحه + کلیدهای + / − / F.</td></tr>
-              <tr><td>خروجی‌ها</td><td>SVG / DXF / <b>EPS (مخصوص CorelDRAW/Illustrator)</b> / PNG / CSV / JSON + CUT DXF/SVG.</td></tr>
+              <tr><td>خروجی‌ها</td><td>SVG / DXF / <b>EPS (مخصوص CorelDRAW/Illustrator)</b> / PNG / CSV / JSON + CHANNEL DXF/SVG + PLEXI DXF/SVG.</td></tr>
             </tbody>
           </table>
           <div class="warn">این برنامه یک <b>CAD ساخت نئون</b> است، نه جایگزین کامل CorelDRAW: ویرایش بیت‌مپ، چندصفحه‌ای، مدیریت رنگ چاپ CMYK و افکت‌های پیچیدهٔ وکتور در آن نیست — ولی برای «طراحی تابلو نئون تا فایل برش» همه‌چیز لازم را دارد.</div>
         </section>
 
         <section id="hs8">
-          <h3>۸. فایل برش‌دهنده (CUT DXF / CUT SVG) و خروجی‌ها</h3>
-          <h4>طرح دوبل — فایلی که به برش‌دهنده می‌دهید</h4>
-          <p>ریسهٔ نئون داخل یک «کانال» (شیار) می‌نشیند. برای ساخت این کانال، ماشین باید <b>دو خط موازی</b> اطراف مسیر را ببرد. دکمه‌های <b>CUT DXF</b> و <b>CUT SVG</b> دقیقاً همین طرح دوبل را تولید می‌کنند:</p>
+          <h3>۸. فایل برش‌دهندهٔ کانال و پلکسی</h3>
+          <h4>CHANNEL DXF / SVG — دو لبهٔ شیار</h4>
+          <p>اگر ریسه داخل شیار CNC/روتر می‌نشیند، این خروجی را بگیرید. فاصلهٔ دو خط برابر <b>Flex Channel Width</b> است و ریسه روی مرکز آن‌ها قرار می‌گیرد.</p>
           <ul>
-            <li>فاصلهٔ دو خط = عرض کانال (Cutting Channel Width، پیش‌فرض 10 میلی‌متر). ریسه دقیقاً وسط این دو خط قرار می‌گیرد.</li>
-            <li>لایه‌های فایل: <b>CUT1</b> و <b>CUT2</b> (و در صورت تیک‌زدن Include centerline، لایهٔ <b>CENTER</b>).</li>
-            <li>واحدها سانتی‌متر و مقیاس 1:1 — مستقیماً در نرم‌افزار برش‌دهنده (CNC / روتر / لیزر / برش ورق) باز می‌شود.</li>
-            <li>با ابزار <b>Channel</b> قبل از خروجی، خطوط برش را روی طرح ببینید.</li>
+            <li>لایه‌ها: <b>CUT1</b> و <b>CUT2</b>؛ در صورت فعال‌بودن Include neon guide، لایهٔ <b>CENTER</b>.</li>
+            <li>پیش‌نمایش: ابزار <b>Flex Channel</b> در ستون چپ.</li>
           </ul>
+          <h4>PLEXI DXF / SVG — دوربُر ورق پلکسی مانند تصاویر نمونه</h4>
+          <p>خط قرمز CorelDRAW در تصویر آویز، «نئون دوم» یا «لبهٔ دوم کانال» نیست؛ <b>کانتور بیرونیِ ورق پلکسی</b> است. خروجی PLEXI همین کانتور را به‌صورت خودکار می‌سازد:</p>
+          <ul>
+            <li>فاصله تا مرکز مسیر = نصف Neon Width + مقدار <b>Plexi Outer Margin</b>.</li>
+            <li>همهٔ مسیرهای نزدیک و متقاطع خودکار <b>Weld</b> می‌شوند؛ گوشه‌ها و سر خطوط گرد هستند و خطوط هم‌پوشان داخل فایل نمی‌ماند.</li>
+            <li>لایهٔ <b>PLEXI_CUT</b> برای دوربُر، <b>PLEXI_HOLES</b> برای سوراخ‌های نصب، و لایهٔ اختیاری <b>NEON_GUIDE</b> برای حک/راهنمای نصب.</li>
+            <li>پیش‌نمایش: ابزار <b>Plexi Outline</b>؛ خط قرمز چین‌دار همان لبهٔ برش نهایی است.</li>
+          </ul>
+          <div class="tip">هر دو نوع خروجی با مقیاس 1:1 و واحد سانتی‌متر ذخیره می‌شوند. هنگام Import در CorelDRAW یا نرم‌افزار دستگاه، واحد سند را cm بگذارید و Scale را 100٪ نگه دارید.</div>
           <h4>بقیهٔ خروجی‌ها</h4>
           <table>
             <thead><tr><th>دکمه</th><th>محتوا</th></tr></thead>
@@ -972,7 +994,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <h4>پیشنهاد گردش ساخت واقعی</h4>
           <ol>
             <li>طراحی و CHECK DESIGN</li>
-            <li>دانلود <b>CUT DXF</b> ← ارسال به برش‌دهنده برای بریدن کانال/شیار روی صفحه.</li>
+            <li>اگر شیار می‌زنید: <b>CHANNEL DXF</b>؛ اگر مثل تصویر ارسالی دوربُر پلکسی می‌خواهید: <b>PLEXI DXF</b>.</li>
             <li>دانلود <b>PRINT / PDF</b> ← برگهٔ ساخت برای تیم برش و مونتاژ.</li>
             <li>طبق جدول برش، ریسه‌ها را ببرید (شروع/پایان هر قطعه روی نقاط برش واقعی 2.5cm است).</li>
             <li>ریسه را داخل کانال بگذارید، سیم‌کشی نقطه‌های شروع/پایان (A، B، C...) و نصب منبع تغذیهٔ پیشنهادی.</li>
@@ -1486,7 +1508,7 @@ function demoProject() {
     settings: {
       intervalCm: 2.5, maxPieceLengthCm: 500, minSpacingCm: 1.5,
       safetyFactor: 80, psuCapacityW: 0, nodeTolCm: 0.5, joinGapCm: 1.0, gridCm: 0.5,
-      channelMm: 10, shapeSides: 5, starInner: 45, spiralTurns: 3, dblGapCm: 4
+      channelMm: 10, plexiMarginMm: 10, holeDiameterMm: 4, shapeSides: 5, starInner: 45, spiralTurns: 3, dblGapCm: 4
     },
     profile: {
       name: "Neon Flex 8mm", widthMm: 8, voltageV: 24,
@@ -1497,6 +1519,7 @@ function demoProject() {
       P('p2', 'NEON 02', [{ x: 140, y: 22 }, { x: 140 - d, y: 22 + d }]),
       P('p3', 'NEON 03', [{ x: 140 - d, y: 22 + d }, { x: 140 - d + 47.5, y: 22 + d }])
     ],
+    holes: [],
     texts: [{ id: 't1', x: 15, y: 12, text: 'DEMO CHAIN A-B-C-D', sizeCm: 4 }],
     mode: 'auto'
   };
@@ -2265,6 +2288,75 @@ function booleanGeoms(objects, op, pxPerCm) {
   return geoms;
 }
 
+/*
+  strokeEnvelopeGeoms(objects, radiusCm, pxPerCm)
+  Builds a CorelDRAW-style welded contour around open or closed centerlines.
+  Every segment is rasterized as a round capsule, all capsules are unioned,
+  then marching squares returns the outer boundary and any real inner holes.
+  This is intentionally different from offsetPolyline: crossings and nearby
+  paths are welded into one fabrication-safe acrylic backer silhouette.
+*/
+function strokeEnvelopeGeoms(objects, radiusCm, pxPerCm) {
+  if (!objects || !objects.length || !(radiusCm > 0)) return [];
+  pxPerCm = pxPerCm || 8;
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9, i, j;
+  for (i = 0; i < objects.length; i++) {
+    for (j = 0; j < objects[i].length; j++) {
+      var p = objects[i][j];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (minX > maxX) return [];
+  minX -= radiusCm; minY -= radiusCm;
+  maxX += radiusCm; maxY += radiusCm;
+  var bw = Math.max(0.01, maxX - minX), bh = Math.max(0.01, maxY - minY);
+  var pp = Math.min(pxPerCm, 3990 / bw, 3990 / bh);
+  pp = Math.max(0.0001, pp); /* always keep the raster within the 4000px safety cap */
+  var pad = 2, w = Math.max(5, Math.ceil(bw * pp) + pad * 2);
+  var h = Math.max(5, Math.ceil(bh * pp) + pad * 2);
+  var mask = new Uint8Array(w * h), rp = Math.max(1, radiusCm * pp), r2 = rp * rp;
+  function pxPoint(q) {
+    return { x: (q.x - minX) * pp + pad, y: (q.y - minY) * pp + pad };
+  }
+  function paintCapsule(a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    var x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - rp - 1));
+    var x1 = Math.min(w - 1, Math.ceil(Math.max(a.x, b.x) + rp + 1));
+    var y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - rp - 1));
+    var y1 = Math.min(h - 1, Math.ceil(Math.max(a.y, b.y) + rp + 1));
+    for (var y = y0; y <= y1; y++) {
+      var cy = y + 0.5;
+      for (var x = x0; x <= x1; x++) {
+        var cx = x + 0.5, t = l2 > 1e-12 ? ((cx - a.x) * dx + (cy - a.y) * dy) / l2 : 0;
+        t = clamp(t, 0, 1);
+        var ex = cx - (a.x + dx * t), ey = cy - (a.y + dy * t);
+        if (ex * ex + ey * ey <= r2) mask[y * w + x] = 1;
+      }
+    }
+  }
+  for (i = 0; i < objects.length; i++) {
+    var pts = objects[i];
+    if (!pts || !pts.length) continue;
+    if (pts.length === 1) paintCapsule(pxPoint(pts[0]), pxPoint(pts[0]));
+    for (j = 1; j < pts.length; j++) paintCapsule(pxPoint(pts[j - 1]), pxPoint(pts[j]));
+  }
+  var loops = traceContours(mask, w, h);
+  var geoms = loopsToGeoms(loops, {
+    eps: Math.max(0.55, pp * 0.035), smooth: false, minLenPx: Math.max(4, pp * 0.5)
+  });
+  for (i = 0; i < geoms.length; i++) {
+    for (j = 0; j < geoms[i].points.length; j++) {
+      geoms[i].points[j].x = (geoms[i].points[j].x - pad) / pp + minX;
+      geoms[i].points[j].y = (geoms[i].points[j].y - pad) / pp + minY;
+    }
+  }
+  strokeEnvelopeGeoms.lastInfo = { pxPerCm: pp, width: w, height: h };
+  return geoms;
+}
+
 /* ---- fit traced geometry into the board (keeps aspect) ---- */
 function fitPathsToBoard(geoms, W, H, marginFrac) {
   var mg = marginFrac === undefined ? 0.06 : marginFrac;
@@ -2317,7 +2409,8 @@ var NEONCORE = {
   pruneSpurs: pruneSpurs, traceContours: traceContours, loopsToGeoms: loopsToGeoms,
   extendChainEnds: extendChainEnds,
   catmullCtrlClosed: catmullCtrlClosed, fillPolyMask: fillPolyMask,
-  maskCombine: maskCombine, booleanGeoms: booleanGeoms
+  maskCombine: maskCombine, booleanGeoms: booleanGeoms,
+  strokeEnvelopeGeoms: strokeEnvelopeGeoms
 };
 
 /* =========================================================================
@@ -2337,6 +2430,8 @@ var S = {
   view: { x: -8, y: -6, zoom: 7.5 },
   gridOn: true,
   showChannel: false,
+  showPlexi: false,
+  plexiCache: null,
   spaceDown: false,
   drag: null, hoverW: null, draft: null, measure: null,
   shapeDraft: null,   /* rect/ellipse/polygon/star/spiral in-progress */
@@ -2374,6 +2469,9 @@ function newId() { return 'p' + Date.now().toString(36) + Math.floor(Math.random
 /* ---- main recompute: numbering, pieces, nodes, power, packing, issues ---- */
 function recompute() {
   var pr = S.project;
+  pr.holes = pr.holes || [];
+  if (pr.settings.holeDiameterMm === undefined) pr.settings.holeDiameterMm = 4;
+  if (pr.settings.plexiMarginMm === undefined) pr.settings.plexiMarginMm = 10;
   pr.profile.intervalCm = pr.profile.intervalCm || 2.5;
   var I = pr.profile.intervalCm;
 
@@ -2405,6 +2503,7 @@ function recompute() {
   for (var l = 0; l < S.pieces.length; l++) lens.push(S.pieces[l].lengthCm);
   S.pack = packRolls(lens, pr.profile.rollLengthCm);
   S.issues = runChecks();
+  S.plexiCache = null;
   renderCutList(); renderMaterials(); renderRolls(); renderSel(); renderStatus(); renderObjects();
   draw();
 }
@@ -2544,18 +2643,42 @@ function draw() {
     ctx.fillText(nd.label, nd.x + 1.2, nd.y - 0.7);
   }
 
-  /* channel (double-line cutting preview) */
+  /* flex channel (two cutting-edge rails) */
   if (S.showChannel) {
-    ctx.strokeStyle = '#ffffff77';
+    ctx.strokeStyle = '#ffffffaa';
     ctx.lineWidth = 0.16;
     ctx.setLineDash([0.7, 0.5]);
     for (var chI = 0; chI < pr.paths.length; chI++) {
+      if (pr.paths[chI].hidden) continue;
       var chd = channelForPath(pr.paths[chI]);
       if (!chd) continue;
       drawPts(ctx, chd.left);
       drawPts(ctx, chd.right);
     }
     ctx.setLineDash([]);
+  }
+
+  /* welded acrylic backer contour, matching the red CorelDRAW sample */
+  if (S.showPlexi) {
+    var pcg = plexiContours();
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 0.28;
+    ctx.setLineDash([1.1, 0.45]);
+    for (var pg = 0; pg < pcg.length; pg++) drawPts(ctx, pcg[pg].points);
+    ctx.setLineDash([]);
+  }
+
+  /* mounting/drill holes for the plexi backer */
+  var holes = pr.holes || [];
+  for (var mh = 0; mh < holes.length; mh++) {
+    var hr = (holes[mh].diameterMm || pr.settings.holeDiameterMm || 4) / 20;
+    ctx.beginPath(); ctx.arc(holes[mh].x, holes[mh].y, hr, 0, Math.PI * 2);
+    ctx.fillStyle = '#020617'; ctx.fill();
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 0.16; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(holes[mh].x - hr * 1.5, holes[mh].y); ctx.lineTo(holes[mh].x + hr * 1.5, holes[mh].y);
+    ctx.moveTo(holes[mh].x, holes[mh].y - hr * 1.5); ctx.lineTo(holes[mh].x, holes[mh].y + hr * 1.5);
+    ctx.stroke();
   }
 
   /* selection + vertices */
@@ -2900,6 +3023,15 @@ function onPointerDown(ev) {
   if (S.tool === 'text') {
     S.textAt = w;
     openTextDialog();
+    return;
+  }
+  if (S.tool === 'hole') {
+    var hp = snapGridPt(w);
+    pushUndo();
+    S.project.holes = S.project.holes || [];
+    S.project.holes.push({ id: newId(), x: hp.x, y: hp.y, diameterMm: S.project.settings.holeDiameterMm || 4 });
+    recompute();
+    setStatus('Mounting hole added at x=' + fmt(hp.x) + ', y=' + fmt(hp.y) + ' cm.', 'ok');
     return;
   }
   if (S.tool === 'split') { splitAtPoint(w); return; }
@@ -3462,7 +3594,7 @@ function exportDXF() {
   function push(s) { o.push(s); }
   function yflip(y) { return H - y; }
   push('0'); push('SECTION'); push('2'); push('HEADER');
-  push('9'); push('$INSUNITS'); push('70'); push('4');
+  push('9'); push('$INSUNITS'); push('70'); push('5');
   push('9'); push('$MEASUREMENT'); push('70'); push('1');
   push('0'); push('ENDSEC');
   push('0'); push('SECTION'); push('2'); push('ENTITIES');
@@ -3951,6 +4083,8 @@ function syncPropsFromProject() {
   $('propGrid').value = pr.settings.gridCm;
   $('propNodeTol').value = pr.settings.nodeTolCm;
   $('propChannel').value = pr.settings.channelMm || 10;
+  $('propPlexiMargin').value = pr.settings.plexiMarginMm === undefined ? 10 : pr.settings.plexiMarginMm;
+  $('propHoleDia').value = pr.settings.holeDiameterMm || 4;
   $('propSides').value = pr.settings.shapeSides || 5;
   $('propStarInner').value = pr.settings.starInner || 45;
   $('propSpiral').value = pr.settings.spiralTurns || 3;
@@ -3977,6 +4111,8 @@ function readProps() {
   pr.settings.gridCm = Math.max(0.05, num($('propGrid').value, 0.5));
   pr.settings.nodeTolCm = Math.max(0.05, num($('propNodeTol').value, 0.5));
   pr.settings.channelMm = Math.max(1, num($('propChannel').value, 10));
+  pr.settings.plexiMarginMm = Math.max(0, num($('propPlexiMargin').value, 10));
+  pr.settings.holeDiameterMm = Math.max(1, num($('propHoleDia').value, 4));
   pr.settings.shapeSides = clamp(Math.round(num($('propSides').value, 5)), 3, 60);
   pr.settings.starInner = clamp(num($('propStarInner').value, 45), 10, 95);
   pr.settings.spiralTurns = clamp(Math.round(num($('propSpiral').value, 3)), 1, 10);
@@ -4573,9 +4709,11 @@ function hexRGB(hex) {
    ========================================================================= */
 function emptyProject() {
   var d = demoProject();
-  d.paths = []; d.texts = [];
+  d.paths = []; d.texts = []; d.holes = [];
   d.name = 'New Project';
   d.settings.channelMm = 10;
+  d.settings.plexiMarginMm = 10;
+  d.settings.holeDiameterMm = 4;
   d.settings.shapeSides = 5; d.settings.starInner = 45;
   d.settings.spiralTurns = 3; d.settings.dblGapCm = 4;
   return d;
@@ -4918,6 +5056,20 @@ function channelForPath(path) {
     right: offsetPolyline(pts, -ch, closed)
   };
 }
+/* Unified plexi silhouette: neon half-width + user margin, welded at overlaps. */
+function plexiContours() {
+  if (S.plexiCache) return S.plexiCache;
+  var pr = S.project, objects = [];
+  for (var i = 0; i < pr.paths.length; i++) {
+    if (pr.paths[i].hidden) continue;
+    var pts = flattenPath(pr.paths[i], 0.35);
+    if (pts.length >= 2) objects.push(pts);
+  }
+  var radiusCm = (pr.profile.widthMm || 8) / 20 +
+    (pr.settings.plexiMarginMm === undefined ? 10 : pr.settings.plexiMarginMm) / 10;
+  S.plexiCache = strokeEnvelopeGeoms(objects, radiusCm, 10);
+  return S.plexiCache;
+}
 function drawPts(ctx, pts) {
   if (!pts || pts.length < 2) return;
   ctx.beginPath();
@@ -4933,7 +5085,8 @@ function polylineSvg(pts, layer, color) {
 }
 function exportCutSvg() {
   var pr = S.project, W = pr.board.widthCm, H = pr.board.heightCm;
-  var a = ['<rect x="0" y="0" width="' + fnum(W) + '" height="' + fnum(H) + '" fill="none" stroke="#bbbbbb" stroke-width="0.2"/>'];
+  /* No board rectangle: fabrication files must contain only intentional cuts. */
+  var a = [];
   var incCenter = $('chkCutCenter') && $('chkCutCenter').checked;
   for (var i = 0; i < pr.paths.length; i++) {
     if (pr.paths[i].hidden) continue;
@@ -4945,8 +5098,8 @@ function exportCutSvg() {
   }
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + fnum(W) + 'cm" height="' + fnum(H) +
     'cm" viewBox="0 0 ' + fnum(W) + ' ' + fnum(H) + '">' + a.join('') + '</svg>';
-  download(safeName() + '-cut.svg', svg, 'image/svg+xml');
-  setStatus('CUT SVG exported — double-line channel for the cutting machine (real scale).', 'ok');
+  download(safeName() + '-channel.svg', svg, 'image/svg+xml');
+  setStatus('CHANNEL SVG exported — flex channel edges at real scale.', 'ok');
 }
 function exportCutDxf() {
   var pr = S.project, W = pr.board.widthCm, H = pr.board.heightCm;
@@ -4959,7 +5112,7 @@ function exportCutDxf() {
     push('11'); push(fnum(x2)); push('21'); push(fnum(yflip(y2))); push('31'); push('0');
   }
   push('0'); push('SECTION'); push('2'); push('HEADER');
-  push('9'); push('$INSUNITS'); push('70'); push('4');
+  push('9'); push('$INSUNITS'); push('70'); push('5');
   push('0'); push('ENDSEC');
   push('0'); push('SECTION'); push('2'); push('ENTITIES');
   var incCenter = $('chkCutCenter') && $('chkCutCenter').checked;
@@ -4978,8 +5131,67 @@ function exportCutDxf() {
   }
   push('0'); push('ENDSEC');
   push('0'); push('EOF');
-  download(safeName() + '-cut.dxf', o.join(String.fromCharCode(13, 10)), 'application/dxf');
-  setStatus('CUT DXF exported — send this to the cutting machine (units cm, Y-up, layers CUT1/CUT2).', 'ok');
+  download(safeName() + '-channel.dxf', o.join(String.fromCharCode(13, 10)), 'application/dxf');
+  setStatus('CHANNEL DXF exported — flex channel edges on CUT1/CUT2 layers (units cm, Y-up).', 'ok');
+}
+
+/* ---- acrylic backer outline: welded rounded contour like CorelDRAW Contour ---- */
+function exportPlexiSvg() {
+  var pr = S.project, W = pr.board.widthCm, H = pr.board.heightCm;
+  var geoms = plexiContours(), a = [];
+  for (var i = 0; i < geoms.length; i++) a.push(polylineSvg(geoms[i].points, 'PLEXI_CUT', '#ff0000'));
+  var holes = pr.holes || [];
+  for (var h = 0; h < holes.length; h++) {
+    var r = (holes[h].diameterMm || pr.settings.holeDiameterMm || 4) / 20;
+    a.push('<circle cx="' + fnum(holes[h].x) + '" cy="' + fnum(holes[h].y) + '" r="' + fnum(r) +
+      '" fill="none" stroke="#000000" stroke-width="0.15" data-layer="PLEXI_HOLES"/>');
+  }
+  if ($('chkCutCenter') && $('chkCutCenter').checked) {
+    for (var p = 0; p < pr.paths.length; p++) {
+      if (pr.paths[p].hidden) continue;
+      var pts = flattenPath(pr.paths[p], 0.45);
+      if (pts.length >= 2) a.push(polylineSvg(pts, 'NEON_GUIDE', '#888888'));
+    }
+  }
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + fnum(W) + 'cm" height="' + fnum(H) +
+    'cm" viewBox="0 0 ' + fnum(W) + ' ' + fnum(H) + '">' + a.join('') + '</svg>';
+  download(safeName() + '-plexi.svg', svg, 'image/svg+xml');
+  setStatus('PLEXI SVG exported — welded red outer contour plus optional NEON_GUIDE.', 'ok');
+}
+function exportPlexiDxf() {
+  var pr = S.project, H = pr.board.heightCm, o = [];
+  function push(s) { o.push(s); }
+  function yflip(y) { return H - y; }
+  function line(a, b, layer) {
+    push('0'); push('LINE'); push('8'); push(layer);
+    push('10'); push(fnum(a.x)); push('20'); push(fnum(yflip(a.y))); push('30'); push('0');
+    push('11'); push(fnum(b.x)); push('21'); push(fnum(yflip(b.y))); push('31'); push('0');
+  }
+  push('0'); push('SECTION'); push('2'); push('HEADER');
+  push('9'); push('$INSUNITS'); push('70'); push('5');
+  push('0'); push('ENDSEC'); push('0'); push('SECTION'); push('2'); push('ENTITIES');
+  var geoms = plexiContours();
+  for (var i = 0; i < geoms.length; i++) {
+    var pts = geoms[i].points;
+    for (var j = 1; j < pts.length; j++) line(pts[j - 1], pts[j], 'PLEXI_CUT');
+    if (pts.length > 2 && dist(pts[0], pts[pts.length - 1]) > 1e-6) line(pts[pts.length - 1], pts[0], 'PLEXI_CUT');
+  }
+  var holes = pr.holes || [];
+  for (var h = 0; h < holes.length; h++) {
+    push('0'); push('CIRCLE'); push('8'); push('PLEXI_HOLES');
+    push('10'); push(fnum(holes[h].x)); push('20'); push(fnum(yflip(holes[h].y))); push('30'); push('0');
+    push('40'); push(fnum((holes[h].diameterMm || pr.settings.holeDiameterMm || 4) / 20));
+  }
+  if ($('chkCutCenter') && $('chkCutCenter').checked) {
+    for (var p = 0; p < pr.paths.length; p++) {
+      if (pr.paths[p].hidden) continue;
+      var guide = flattenPath(pr.paths[p], 0.45);
+      for (var k = 1; k < guide.length; k++) line(guide[k - 1], guide[k], 'NEON_GUIDE');
+    }
+  }
+  push('0'); push('ENDSEC'); push('0'); push('EOF');
+  download(safeName() + '-plexi.dxf', o.join(String.fromCharCode(13, 10)), 'application/dxf');
+  setStatus('PLEXI DXF exported — PLEXI_CUT is the laser outline; NEON_GUIDE is optional (units cm).', 'ok');
 }
 
 /* ---- trace image modal ---- */
@@ -5121,7 +5333,7 @@ function applyTrace() {
       setStatus('Traced ' + wrapped.length + ' neon path(s) from image (' +
         (usedMode === 'outline' ? 'OUTLINE / double-line — دو خطی' : 'centerline — تک‌خط') +
         ') — lengths corrected to the ' + fmt(S.project.profile.intervalCm) +
-        ' cm cutting grid. Use CUT DXF for the machine.', 'ok');
+        ' cm cutting grid. Use CHANNEL DXF for a groove or PLEXI DXF for the acrylic outline.', 'ok');
     } catch (e) {
       setStatus('Trace failed: ' + e.message, 'err');
     }
@@ -5266,8 +5478,20 @@ function bindEvents() {
   $('toolChannel').addEventListener('click', function () {
     S.showChannel = !S.showChannel;
     $('toolChannel').classList.toggle('active', S.showChannel);
-    setStatus('Cutting channel preview: ' + (S.showChannel ? 'ON — double lines show what the machine cuts.' : 'OFF'), '');
+    setStatus('Flex channel preview: ' + (S.showChannel ? 'ON — two rails are the channel edges, not extra neon.' : 'OFF'), '');
     draw();
+  });
+  $('toolPlexi').addEventListener('click', function () {
+    S.showPlexi = !S.showPlexi;
+    $('toolPlexi').classList.toggle('active', S.showPlexi);
+    setStatus('Plexi outline preview: ' + (S.showPlexi ? 'ON — red welded contour is the acrylic laser-cut edge.' : 'OFF'), '');
+    draw();
+  });
+  $('btnClearHoles').addEventListener('click', function () {
+    if (!S.project.holes || !S.project.holes.length) { setStatus('No mounting holes to clear.', ''); return; }
+    if (!window.confirm('Remove all mounting holes?')) return;
+    pushUndo(); S.project.holes = []; recompute();
+    setStatus('All mounting holes removed.', 'ok');
   });
   $('toolReverse').addEventListener('click', function () {
     if (!S.sel.length) { setStatus('Select a path first.', 'warn'); return; }
@@ -5323,6 +5547,8 @@ function bindEvents() {
   $('expJson').addEventListener('click', exportJSON);
   $('expCutDxf').addEventListener('click', exportCutDxf);
   $('expCutSvg').addEventListener('click', exportCutSvg);
+  $('expPlexiDxf').addEventListener('click', exportPlexiDxf);
+  $('expPlexiSvg').addEventListener('click', exportPlexiSvg);
   $('btnTrace').addEventListener('click', function () { $('imgInput').click(); });
   $('toolTrace2').addEventListener('click', function () { $('imgInput').click(); });
   $('btnNeonText').addEventListener('click', function () { S.textAt = null; openTextDialog(); });
@@ -5395,7 +5621,7 @@ function bindEvents() {
 
   /* props */
   var propIds = ['projName', 'propWidth', 'propHeight', 'propNeonW', 'propInterval', 'propBend', 'propVolt',
-    'propPower', 'propRoll', 'propMaxPiece', 'propSpacing', 'propSafety', 'propPsu', 'propGrid', 'propNodeTol', 'propChannel', 'profName',
+    'propPower', 'propRoll', 'propMaxPiece', 'propSpacing', 'propSafety', 'propPsu', 'propGrid', 'propNodeTol', 'propChannel', 'propPlexiMargin', 'propHoleDia', 'profName',
     'propSides', 'propStarInner', 'propSpiral', 'propDblGap'];
   for (var p = 0; p < propIds.length; p++) {
     $(propIds[p]).addEventListener('change', function () {

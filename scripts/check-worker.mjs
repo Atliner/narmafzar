@@ -159,6 +159,25 @@ function near(a, b, eps, name) {
   ok(left.length >= 3 && right.length >= 3, 'offsets have points');
 }
 
+/* ---------- welded plexi envelope: round closed outline + overlap union ---------- */
+{
+  const lineA = [{ x: 0, y: 0 }, { x: 10, y: 0 }];
+  const pill = NC.strokeEnvelopeGeoms([lineA], 1, 12);
+  ok(pill.length === 1, 'single route -> one closed plexi pill contour (got ' + pill.length + ')');
+  if (pill.length === 1) {
+    const bb = pill[0].points.reduce((a, p) => ({
+      minX: Math.min(a.minX, p.x), maxX: Math.max(a.maxX, p.x),
+      minY: Math.min(a.minY, p.y), maxY: Math.max(a.maxY, p.y)
+    }), { minX: 1e9, maxX: -1e9, minY: 1e9, maxY: -1e9 });
+    near(bb.minX, -1, 0.15, 'plexi round cap extends left by radius');
+    near(bb.maxX, 11, 0.15, 'plexi round cap extends right by radius');
+    near(bb.maxY - bb.minY, 2, 0.2, 'plexi envelope width = diameter');
+  }
+  const lineB = [{ x: 5, y: -4 }, { x: 5, y: 4 }];
+  const welded = NC.strokeEnvelopeGeoms([lineA, lineB], 1, 12);
+  ok(welded.length === 1, 'crossing routes weld to one outer plexi contour (got ' + welded.length + ')');
+}
+
 /* ---------- boolean ops ---------- */
 {
   const pxPerCm = 4;
