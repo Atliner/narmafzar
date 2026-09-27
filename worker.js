@@ -3,7 +3,11 @@
 // Single-file Cloudflare Worker — serves the complete client-side app.
 // All geometry, cut-list, power and bin-packing processing runs in the browser.
 // No build step, no external dependencies. See docs/DESIGN.md and README.md.
-// Build marker: v1.0.1 (2026-09-27) — change kept trivial to exercise CI/CD.
+// Build marker: v2.0.0 (2026-09-27) — TRACE v2 (Otsu + despeckle + tip recovery
+// + OUTLINE double-line mode), real NEON TEXT tool (fa/en, fonts, single/double
+// line), CorelDRAW-style toolkit (shapes, transform handles, align/distribute,
+// order, boolean weld/trim/intersect, double-line transform, colors, objects
+// manager, zoom/fit, EPS export).
 // =============================================================================
 
 const HTML_PAGE = `<!DOCTYPE html>
@@ -143,6 +147,11 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
 .roll-bar{flex:1; height:18px; background:#0f1722; border:1px solid var(--line2); border-radius:9px; overflow:hidden; display:flex;}
 .roll-fill{height:100%;}
 .roll-tag{width:64px; font-size:10px; color:var(--dim);}
+.dot{display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; border:1px solid #0008;}
+#traceStatus.ok{color:var(--ok);} #traceStatus.err{color:var(--err);} #traceStatus.warn{color:var(--warn);}
+.swatch{width:22px; height:22px; border-radius:6px; border:2px solid #0006; cursor:pointer; padding:0;}
+.swatch.active{border-color:#fff; outline:2px solid var(--acc);}
+.p-row select{width:100%;}
 
 /* ---------- STATUS ---------- */
 .status{
@@ -258,10 +267,12 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
     <button id="btnCheck" class="btn primary">CHECK DESIGN</button>
     <button id="btnPrint" class="btn accent">PRINT / PDF</button>
     <div class="sep"></div>
+    <button id="btnNeonText" class="btn sm primary" title="Type text and turn it into real neon paths (Persian/English, single or double line)">NEON TEXT</button>
     <button id="btnTrace" class="btn sm" title="Upload any image and convert it to neon-ready vector paths">TRACE IMAGE</button>
     <select id="exampleSel" class="proj-name" style="width:170px" title="Load a professional example">
       <option value="">EXAMPLES…</option>
       <option value="cafe">Cafe Sign — circle + نئون</option>
+      <option value="double">Double-Line Text — دو خطی</option>
       <option value="shapes">Shapes Gallery</option>
       <option value="chain">Chain ABCD (cut list demo)</option>
       <option value="empty">Empty board</option>
@@ -270,6 +281,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
     <div class="export-group">
       <button id="expSvg" class="btn sm" title="Export SVG (real scale)">SVG</button>
       <button id="expDxf" class="btn sm" title="Export DXF (R12, cm)">DXF</button>
+      <button id="expEps" class="btn sm" title="Export EPS (vector — opens in CorelDRAW / Illustrator)">EPS</button>
       <button id="expPng" class="btn sm" title="Export PNG (3x)">PNG</button>
       <button id="expCsv" class="btn sm" title="Export cut list CSV">CSV</button>
       <button id="expJson" class="btn sm" title="Export project JSON">JSON</button>
@@ -294,7 +306,15 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <div class="tool" data-tool="pen"><span class="ico">&#9998;</span>Pen</div>
       <div class="tool" data-tool="line"><span class="ico">&#9585;</span>Line</div>
       <div class="tool" data-tool="bezier"><span class="ico">&#8767;</span>Bezier</div>
+      <div class="tool-h">SHAPES</div>
+      <div class="tool" data-tool="rect"><span class="ico">&#9645;</span>Rect</div>
+      <div class="tool" data-tool="ellipse"><span class="ico">&#9711;</span>Ellipse</div>
+      <div class="tool" data-tool="polygon"><span class="ico">&#11040;</span>Polygon</div>
+      <div class="tool" data-tool="star"><span class="ico">&#9733;</span>Star</div>
+      <div class="tool" data-tool="spiral"><span class="ico">&#9741;</span>Spiral</div>
+      <div class="tool-h">TEXT / TRACE</div>
       <div class="tool" data-tool="text"><span class="ico">T</span>Text</div>
+      <div class="tool" id="toolTrace2"><span class="ico">&#128444;</span>Trace Img</div>
       <div class="tool" data-tool="split"><span class="ico">&#9986;</span>Split</div>
       <div class="tool" data-tool="measure"><span class="ico">&#8646;</span>Measure</div>
       <div class="tool-h">EDIT</div>
@@ -303,6 +323,24 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <div class="tool" id="toolSnapLen"><span class="ico">&#8776;</span>Snap Lengths</div>
       <div class="tool" id="toolReverse"><span class="ico">&#8644;</span>Reverse</div>
       <div class="tool" id="toolDelete"><span class="ico">&#10006;</span>Delete</div>
+      <div class="tool-h">ARRANGE</div>
+      <div class="tool" id="toolDup"><span class="ico">&#8679;</span>Duplicate</div>
+      <div class="tool" id="toolCopy"><span class="ico">&#9114;</span>Copy</div>
+      <div class="tool" id="toolPaste"><span class="ico">&#9116;</span>Paste</div>
+      <div class="tool" id="toolAlign"><span class="ico">&#9634;</span>Align…</div>
+      <div class="tool" id="toolFront"><span class="ico">&#8599;</span>To Front</div>
+      <div class="tool" id="toolBack"><span class="ico">&#8601;</span>To Back</div>
+      <div class="tool" id="toolFlipH"><span class="ico">&#8646;</span>Flip H</div>
+      <div class="tool" id="toolFlipV"><span class="ico">&#8597;</span>Flip V</div>
+      <div class="tool-h">SHAPING</div>
+      <div class="tool" id="toolWeld"><span class="ico">&#9711;</span>Weld</div>
+      <div class="tool" id="toolTrim"><span class="ico">&#9986;</span>Trim</div>
+      <div class="tool" id="toolIntersect"><span class="ico">&#9675;</span>Intersect</div>
+      <div class="tool" id="toolDblLine"><span class="ico">&#8741;</span>Double Line</div>
+      <div class="tool-h">VIEW</div>
+      <div class="tool" id="toolZoomIn"><span class="ico">&#10133;</span>Zoom In</div>
+      <div class="tool" id="toolZoomOut"><span class="ico">&#10134;</span>Zoom Out</div>
+      <div class="tool" id="toolZoomFit"><span class="ico">&#9635;</span>Fit Page</div>
     </aside>
 
     <!-- ============ CANVAS ============ -->
@@ -368,9 +406,22 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       </div>
       <p class="hint">In AUTO MODE lengths are corrected geometrically so every START/END lands on a real cutting point of the neon (multiples of the cutting interval). Rounding is never used alone.</p>
 
+      <div class="p-h">SHAPE / DOUBLE-LINE SETTINGS</div>
+      <div class="p-grid">
+        <div class="p-row"><label>Polygon / Star sides</label>
+          <input id="propSides" type="number" min="3" max="60" step="1" value="5"></div>
+        <div class="p-row"><label>Star inner radius</label>
+          <div class="unit"><input id="propStarInner" type="number" min="10" max="95" step="5" value="45"><i>%</i></div></div>
+        <div class="p-row"><label>Spiral turns</label>
+          <input id="propSpiral" type="number" min="1" max="10" step="1" value="3"></div>
+        <div class="p-row"><label>Double-line gap</label>
+          <div class="unit"><input id="propDblGap" type="number" min="0.5" step="0.5" value="4"><i>cm</i></div></div>
+      </div>
+      <p class="hint">Double Line replaces every selected path with TWO parallel neon lines (gap above) — the classic double-tube sign look. Keep the centerline too from the dialog prompt.</p>
+
       <div class="p-h">SELECTED PATH</div>
       <div class="sel-box" id="selBox">
-        <div class="hint" id="selNone">Nothing selected — use Select tool and click a path.</div>
+        <div class="hint" id="selNone">Nothing selected — use Select tool and click a path (or drag a rectangle around several).</div>
         <div id="selInfo" style="display:none">
           <div class="kv"><span>Name</span><b id="selName">—</b></div>
           <div class="kv"><span>Length (geometry)</span><b id="selLen">—</b></div>
@@ -390,6 +441,34 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <div class="p-row"><label>Note</label><input id="selNote"></div>
         </div>
       </div>
+
+      <div class="p-h">TRANSFORM (SELECTION)</div>
+      <div class="p-grid">
+        <div class="p-row"><label>X (left)</label>
+          <div class="unit"><input id="tfX" type="number" step="0.1"><i>cm</i></div></div>
+        <div class="p-row"><label>Y (top)</label>
+          <div class="unit"><input id="tfY" type="number" step="0.1"><i>cm</i></div></div>
+        <div class="p-row"><label>Width</label>
+          <div class="unit"><input id="tfW" type="number" step="0.1"><i>cm</i></div></div>
+        <div class="p-row"><label>Height</label>
+          <div class="unit"><input id="tfH" type="number" step="0.1"><i>cm</i></div></div>
+      </div>
+      <div class="p-actions">
+        <button id="tfApply" class="btn sm primary">Apply</button>
+        <button id="tfRotL" class="btn sm" title="Rotate -90&deg;">&#8634; 90&deg;</button>
+        <button id="tfRotR" class="btn sm" title="Rotate +90&deg;">90&deg; &#8635;</button>
+        <button id="tfRot15" class="btn sm" title="Rotate +15&deg;">+15&deg;</button>
+      </div>
+      <p class="hint">Or drag directly on the board: cyan corner handles = scale, side handles = stretch, the yellow circle above = rotate (Shift snaps 15&deg;).</p>
+
+      <div class="p-h">NEON COLOR (SELECTION)</div>
+      <div id="colorRow" style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px"></div>
+      <div class="p-row"><label>Custom color</label>
+        <div style="display:flex; gap:6px">
+          <input id="colorCustom" type="color" value="#22d3ee" style="height:30px; padding:2px">
+          <button id="colorSet" class="btn sm">Set</button>
+        </div>
+      </div>
     </aside>
   </div>
 
@@ -399,6 +478,7 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
       <div class="tab active" data-tab="cut">CUT LIST</div>
       <div class="tab" data-tab="mat">MATERIALS &amp; POWER</div>
       <div class="tab" data-tab="roll">ROLLS &amp; WASTE</div>
+      <div class="tab" data-tab="obj">OBJECTS</div>
       <div style="flex:1"></div>
       <button id="btnPrint2" class="btn sm accent" style="margin:0 0 6px">PRINT / PDF this table</button>
     </div>
@@ -416,6 +496,14 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
     </div>
     <div class="tab-body" id="tabRoll" style="display:none">
       <div id="rollPanel"></div>
+    </div>
+    <div class="tab-body" id="tabObj" style="display:none">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Object (click to select)</th><th>Length</th><th>Snapped</th><th>Show / Lock / Delete</th>
+        </tr></thead>
+        <tbody id="objBody"></tbody>
+      </table>
     </div>
   </section>
 
@@ -456,28 +544,126 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
   </div>
 </div>
 
-<!-- ============ TRACE IMAGE MODAL ============ -->
+<!-- ============ TRACE IMAGE MODAL (v2) ============ -->
 <div class="modal hidden" id="modalTrace">
-  <div class="modal-card">
+  <div class="modal-card" style="width:min(860px,94vw)">
     <h2>TRACE IMAGE &rarr; NEON PATHS</h2>
-    <div class="sub">Any image (PNG / JPG / WEBP / GIF / BMP) &rarr; centerline vectors &rarr; snapped to the 2.5 cm cutting grid &rarr; ready for the cutting machine via CUT DXF / CUT SVG (double-line channel).</div>
+    <div class="sub">Any image (PNG / JPG / WEBP / GIF / BMP) &rarr; vector neon paths, snapped to the cutting grid.
+      <b>Centerline</b> = one tube on the stroke axis. <b>Outline / دو خطی</b> = the tube follows <b>both edges</b> of every stroke (double-line look).</div>
     <div style="display:flex; gap:14px; align-items:flex-start">
       <div style="flex:1; min-width:0">
-        <canvas id="traceCv" style="width:100%; border:1px solid #2e3d52; border-radius:8px; background:#fff; max-height:340px"></canvas>
+        <canvas id="traceCv" style="width:100%; border:1px solid #2e3d52; border-radius:8px; background:#fff; max-height:400px"></canvas>
+        <div id="traceStatus" class="hint" style="margin-top:6px">Loading…</div>
       </div>
-      <div style="width:230px">
-        <div class="p-row"><label>Threshold</label><input id="traceThresh" type="range" min="20" max="240" value="128"></div>
-        <div class="p-row"><label>Detail (0=fine, 40=coarse)</label><input id="traceDetail" type="range" min="2" max="40" value="14"></div>
+      <div style="width:250px">
+        <div class="p-row"><label>Trace mode / حالت</label>
+          <select id="traceMode">
+            <option value="center">Centerline — تک‌خط (روی خود خط)</option>
+            <option value="outline">Outline — دو خطی (دور خطوط)</option>
+          </select>
+        </div>
+        <div class="p-row"><label><input id="traceAuto" type="checkbox" checked> Auto threshold (Otsu — پیشنهادی)</label></div>
+        <div class="p-row"><label>Threshold (manual)</label><input id="traceThresh" type="range" min="20" max="240" value="128"></div>
+        <div class="p-row"><label>Noise removal / حذف نویز (px)</label><input id="traceNoise" type="range" min="0" max="10" value="3"></div>
+        <div class="p-row"><label>Detail (0=fine, 40=coarse)</label><input id="traceDetail" type="range" min="2" max="40" value="12"></div>
         <div class="p-row"><label>Min stroke length</label>
           <div class="unit"><input id="traceMinLen" type="number" min="0.5" step="0.5" value="3"><i>cm</i></div></div>
+        <div class="p-row"><label>Quality / کیفیت ترسیم</label>
+          <select id="traceQuality">
+            <option value="600">600 px — fast</option>
+            <option value="900" selected>900 px — balanced</option>
+            <option value="1200">1200 px — fine</option>
+            <option value="1600">1600 px — ultra</option>
+          </select>
+        </div>
         <div class="p-row"><label><input id="traceInvert" type="checkbox"> Invert (light shape on dark)</label></div>
         <div class="p-row"><label><input id="traceSmooth" type="checkbox" checked> Smooth curves (bezier)</label></div>
-        <p class="hint">Use high-contrast images (logo, line art, text). The result is the NEON CENTERLINE; every length is corrected geometrically to the cutting grid. Export <b>CUT DXF</b> for the machine: it contains the double outline (channel) where the neon strip sits.</p>
+        <p class="hint">The preview shows <b>exactly</b> what will be added. Red lines = neon paths. High-contrast images (logo, line art, text) work best; auto-threshold handles most photos automatically.</p>
       </div>
     </div>
     <div class="modal-actions">
       <button id="traceCancel" class="btn">Cancel</button>
       <button id="traceApply" class="btn primary">Add to design</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ NEON TEXT MODAL ============ -->
+<div class="modal hidden" id="modalText">
+  <div class="modal-card" style="width:min(760px,94vw)">
+    <h2>TEXT &rarr; NEON (متن نئونی)</h2>
+    <div class="sub">Type any text — Persian (فارسی) or English — pick a font, and it becomes <b>real neon paths</b> (in the cut list, exportable, editable). This is NOT a note.</div>
+    <div style="display:flex; gap:14px; align-items:flex-start">
+      <div style="flex:1; min-width:0">
+        <div class="p-row"><label>Text / متن</label>
+          <input id="txtInput" placeholder="نئون / NEON" style="font-size:15px; padding:9px">
+        </div>
+        <canvas id="txtPreview" width="380" height="150" style="width:100%; border:1px solid #2e3d52; border-radius:8px; margin-top:4px"></canvas>
+      </div>
+      <div style="width:240px">
+        <div class="p-row"><label>Font / فونت</label>
+          <select id="txtFont">
+            <option value="Tahoma" selected>Tahoma (فارسی ✓)</option>
+            <option value="Segoe UI">Segoe UI (فارسی ✓)</option>
+            <option value="Arial">Arial (فارسی ✓)</option>
+            <option value="Times New Roman">Times New Roman (فارسی ✓)</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Impact">Impact</option>
+            <option value="Comic Sans MS">Comic Sans MS</option>
+            <option value="Courier New">Courier New</option>
+            <option value="__custom__">Custom… (نام فونت نصب‌شده)</option>
+          </select>
+        </div>
+        <div class="p-row"><label>Custom font name</label><input id="txtFontCustom" placeholder="e.g. Vazirmatn"></div>
+        <div class="p-grid">
+          <div class="p-row"><label>Size on board</label>
+            <div class="unit"><input id="txtSize" type="number" min="1" step="1" value="20"><i>cm</i></div></div>
+          <div class="p-row"><label>Letter spacing</label>
+            <div class="unit"><input id="txtSpacing" type="number" min="-20" max="80" step="2" value="0"><i>%</i></div></div>
+        </div>
+        <div class="p-row" style="flex-direction:row; gap:12px; align-items:center">
+          <label style="margin:0"><input id="txtBold" type="checkbox"> Bold</label>
+          <label style="margin:0"><input id="txtItalic" type="checkbox"> Italic</label>
+          <label style="margin:0"><input id="txtThicken" type="checkbox"> Thicken</label>
+        </div>
+        <div class="p-row"><label>Neon mode / حالت نئون</label>
+          <select id="txtMode">
+            <option value="center">Centerline — تک‌خط</option>
+            <option value="outline">Outline — دو خطی (دور حروف)</option>
+          </select>
+        </div>
+        <div class="p-row"><label><input id="txtAsLabel" type="checkbox"> Add as note/label only (not neon)</label></div>
+        <p class="hint">Centerline: one tube runs along each letter stroke.<br>Outline: the tube runs along <b>both sides</b> of every stroke — the double-line neon look.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button id="txtCancel" class="btn">Cancel</button>
+      <button id="txtApply" class="btn primary">Create neon text</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ALIGN & DISTRIBUTE MODAL ============ -->
+<div class="modal hidden" id="modalAlign">
+  <div class="modal-card" style="width:min(420px,92vw)">
+    <h2>ALIGN &amp; DISTRIBUTE</h2>
+    <div class="sub">Aligns the selected paths relative to the board (like CorelDRAW "Align to Page").</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px">
+      <button class="btn" data-align="left">Left</button>
+      <button class="btn" data-align="chcenter">Center H</button>
+      <button class="btn" data-align="right">Right</button>
+      <button class="btn" data-align="top">Top</button>
+      <button class="btn" data-align="vcenter">Middle V</button>
+      <button class="btn" data-align="bottom">Bottom</button>
+    </div>
+    <div class="p-h" style="margin-top:14px">DISTRIBUTE (3+ paths)</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px">
+      <button class="btn" id="distH">Equal horizontal gaps</button>
+      <button class="btn" id="distV">Equal vertical gaps</button>
+    </div>
+    <div class="modal-actions">
+      <button id="btnCloseAlign" class="btn primary">Close</button>
     </div>
   </div>
 </div>
@@ -495,7 +681,9 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
         <button data-target="hs4">۴. بوم طراحی (CANVAS)</button>
         <button data-target="hs5">۵. ویژگی‌ها (PROPERTIES)</button>
         <button data-target="hs6">۶. جدول برش و مواد</button>
-        <button data-target="hs7">۷. تبدیل عکس به نئون</button>
+        <button data-target="hs7">۷. تبدیل عکس به نئون (v2)</button>
+        <button data-target="hs7b">۷ب. متن نئونی و حالت دو خطی</button>
+        <button data-target="hs7c">۷پ. ابزارهای CorelDRAW</button>
         <button data-target="hs8">۸. فایل برش‌دهنده</button>
         <button data-target="hs9">۹. بررسی نهایی (CHECK)</button>
         <button data-target="hs10">۱۰. پروفایل نئون</button>
@@ -549,11 +737,40 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <h3>۳. ابزارها (TOOLS — سمت چپ)</h3>
           <h4>ابزارهای ترسیم</h4>
           <ul>
-            <li><b>Select (انتخاب)</b> — با کلیک روی هر مسیر آن را انتخاب کنید؛ با کشیدن جابه‌جایی می‌کند. رأس‌ها (نقطه‌های سفید) را بگیرید و بکشید تا شکل عوض شود. کلیک روی جای خالی، انتخاب را پاک می‌کند. با نگه‌داشتن Shift چند مسیر را با هم انتخاب کنید.</li>
+            <li><b>Select (انتخاب)</b> — با کلیک روی هر مسیر آن را انتخاب کنید؛ با کشیدن جابه‌جایی می‌کند. رأس‌ها (نقطه‌های سفید) را بگیرید و بکشید تا شکل عوض شود. کشیدن روی جای خالی = <b>انتخاب کادری</b> (همهٔ مسیرهای داخل کادر انتخاب می‌شوند). Shift = افزودن به انتخاب.</li>
+            <li><b>دستگیره‌های تبدیل (Transform)</b> — وقتی چیزی انتخاب است: دستگیره‌های <b>آبی گوشه‌ها</b> = بزرگ/کوچک‌کردن متناسب، دستگیره‌های <b>کنارها</b> = کشیدن یک‌بعدی، <b>دایرهٔ زرد بالای کادر</b> = چرخش (با Shift روی ۱۵ درجه قفل می‌شود). مثل CorelDRAW!</li>
             <li><b>Pen (قلم)</b> — کلیک‌کلیک کنید تا خط شکسته (پلی‌خط) بسازید. با <kbd>Enter</kbd> یا <b>دوکلیک</b> تمام می‌شود. با <kbd>Esc</kbd> لغو می‌شود.</li>
             <li><b>Line (خط)</b> — دو کلیک: نقطهٔ شروع و پایان یک خط صاف.</li>
             <li><b>Bezier (منحنی)</b> — مانند Pen کلیک کنید؛ هنگام پایان، مسیر به‌صورت خودکار به منحنی‌های نرم (Catmull-Rom) تبدیل می‌شود — برای اشکال ارگانیک و خم‌دار نئون ایده‌آل است.</li>
-            <li><b>Text (متن)</b> — کلیک کنید و متن یادداشت بنویسید (روی طرح چاپ می‌شود ولی نئون نیست و در جدول برش نمی‌آید). برای متن نئونیِ واقعی از TRACE IMAGE استفاده کنید.</li>
+          </ul>
+          <h4>اشکال هندسی (مثل CorelDRAW)</h4>
+          <ul>
+            <li><b>Rect (مستطیل)</b> — بکشید تا مستطیل بسازید؛ با <kbd>Shift</kbd> مربع.</li>
+            <li><b>Ellipse (بیضی)</b> — بکشید؛ با <kbd>Shift</kbd> دایرهٔ کامل.</li>
+            <li><b>Polygon (چندضلعی)</b> — از مرکز بکشید؛ تعداد ضلع‌ها در PROPERTIES → «Polygon / Star sides».</li>
+            <li><b>Star (ستاره)</b> — از مرکز بکشید؛ نسبت شعاع داخلی در «Star inner radius».</li>
+            <li><b>Spiral (مارپیچ)</b> — از مرکز بکشید؛ تعداد دورها در «Spiral turns».</li>
+          </ul>
+          <h4>متن و تصویر</h4>
+          <ul>
+            <li><b>Text (متن نئونی)</b> — کلیک کنید؛ پنجرهٔ TEXT باز می‌شود: متن فارسی/انگلیسی بنویسید، فونت و اندازه انتخاب کنید و <b>متن به مسیر واقعی نئون تبدیل می‌شود</b> (در جدول برش می‌آید و قابل خروجی گرفتن است). حالت <b>Centerline</b> = یک ریسه روی خود خطوط حروف؛ حالت <b>Outline — دو خطی</b> = ریسه از <b>دو طرف خطوط حروف</b> می‌گذرد (نمای دوخطی). اگر تیک «note/label only» را بزنید، متن فقط به‌صورت برچسب چاپی روی تابلو می‌نشیند (نئون نیست).</li>
+            <li><b>Trace Img</b> — مثل دکمهٔ TRACE IMAGE بالای صفحه؛ آپلود عکس و تبدیل به نئون (بخش ۷).</li>
+          </ul>
+          <h4>چیدمان و ترتیب (ARRANGE)</h4>
+          <ul>
+            <li><b>Duplicate / Copy / Paste</b> — تکرار و کپی/چسباندن مسیرهای انتخابی (Ctrl+D / Ctrl+C / Ctrl+V).</li>
+            <li><b>Align…</b> — تراز نسبت به تابلو: چپ/وسط/راست، بالا/وسط/پایین + توزیع یکنواخت فاصله‌ها (۳ مسیر یا بیشتر).</li>
+            <li><b>To Front / To Back</b> — آوردن جلو/فرستادن عقب در ترتیب اشیا.</li>
+            <li><b>Flip H / Flip V</b> — قرینهٔ افقی/عمودی.</li>
+          </ul>
+          <h4>شکل‌دهی (SHAPING)</h4>
+          <ul>
+            <li><b>Weld / Trim / Intersect</b> — عملیات بولین مثل CorelDRAW: <b>جوش</b> (ادغام چند شکل بسته در یک طرح)، <b>برش</b> (کم‌کردن شکل‌های بعدی از اولی)، <b>اشتراک</b> (فقط ناحیهٔ مشترک). روی اشکال بسته بهترین نتیجه را می‌دهد.</li>
+            <li><b>Double Line (دو خطی)</b> — هر مسیر انتخاب‌شده را به <b>دو خط نئون موازی</b> تبدیل می‌کند (فاصله در PROPERTIES → «Double-line gap»). برای متن‌ها و طرح‌هایی که نئون باید دوخطی اجرا شود.</li>
+          </ul>
+          <h4>نمایش (VIEW)</h4>
+          <ul>
+            <li><b>Zoom In / Out / Fit Page</b> — بزرگ‌نمایی، کوچک‌نمایی و تناسب با صفحه (کلید <kbd>F</kbd>).</li>
           </ul>
           <h4>ابزارهای ویرایش</h4>
           <ul>
@@ -660,26 +877,73 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
         </section>
 
         <section id="hs7">
-          <h3>۷. تبدیل عکس به نئون (TRACE IMAGE)</h3>
-          <p>هر عکسی (PNG، JPG، WEBP، GIF، BMP) — لوگو، خط‌نویس، متن، طرح — را می‌توانید مستقیم به مسیر نئون تبدیل کنید:</p>
+          <h3>۷. تبدیل عکس به نئون (TRACE IMAGE — نسخهٔ ۲)</h3>
+          <p>هر عکسی (PNG، JPG، WEBP، GIF، BMP) — لوگو، خط‌نویس، متن، طرح — را به مسیر نئون تبدیل کنید. موتور جدید به‌جای آستانهٔ ثابت، <b>آستانهٔ خودکار Otsu</b> دارد، نویز و لکه‌های ریز را حذف می‌کند، انتهای خطوط را که در اسکلت‌سازی عقب می‌مانند <b>برمی‌گرداند</b> و شاخه‌های اضافی را می‌زند:</p>
           <ol>
-            <li>دکمهٔ <b>TRACE IMAGE</b> در نوار بالا را بزنید و عکس را انتخاب کنید.</li>
-            <li>در پنجرهٔ پیش‌نمایش، خطوط قرمز = همان مسیرهایی است که ساخته می‌شود.</li>
-            <li>اسلایدرها را تنظیم کنید (جدول زیر) تا نتیجه تمیز شود.</li>
-            <li><b>Add to design</b> را بزنید. مسیرها به تابلو اضافه و طولشان روی گام 2.5 سانت اصلاح می‌شود.</li>
+            <li>دکمهٔ <b>TRACE IMAGE</b> را بزنید و عکس را انتخاب کنید.</li>
+            <li><b>حالت ترسیم</b> را انتخاب کنید (جدول زیر).</li>
+            <li>پیش‌نمایش قرمز <b>دقیقاً همان چیزی است</b> که روی تابلو اضافه می‌شود (WYSIWYG).</li>
+            <li>اسلایدرها را تنظیم و <b>Add to design</b> را بزنید.</li>
           </ol>
           <table>
             <thead><tr><th>کنترل</th><th>کاربرد</th></tr></thead>
             <tbody>
-              <tr><td>Threshold</td><td>مرز سیاه/سفید. اگر اشکال ناقص افتاد، کمترش کنید؛ اگر لکهٔ اضافه می‌آید، بیشترش کنید.</td></tr>
-              <tr><td>Detail</td><td>ریزبینی. کمتر = خطوط نرم‌تر و تمیزتر. بیشتر = جزئیات بیشتر (و شلوغ‌تر).</td></tr>
-              <tr><td>Min stroke</td><td>حذف خط‌های خیلی کوتاه (نویز). روی 2 تا 4 سانت تنظیم خوبی است.</td></tr>
-              <tr><td>Invert</td><td>وقتی شکل روشن روی پس‌زمینهٔ تیره است تیک بزنید.</td></tr>
-              <tr><td>Smoothing</td><td>تبدیل خطوط به منحنی‌های نرم (پیشنهادی: روشن).</td></tr>
+              <tr><td><b>Trace mode</b></td><td><b>Centerline — تک‌خط:</b> یک ریسه نئون دقیقاً روی محور خطوط عکس. <b>Outline — دو خطی:</b> ریسه از <b>دو لبهٔ هر خط</b> می‌گذرد؛ برای متن‌ها و طرح‌هایی که نمای دولاین می‌خواهید.</td></tr>
+              <tr><td><b>Auto threshold</b></td><td>آستانهٔ سیاه/سفید خودکار (الگوریتم Otsu) — برای اکثر عکس‌ها روشن بمانید. اگر شکل ناقص/اضافی بود، تیک را بردارید و Threshold دستی را بچرخانید.</td></tr>
+              <tr><td><b>Noise removal</b></td><td>حذف لکه‌ها و نقطه‌های نویز (مخصوص عکس‌های JPG و عکس‌های موبایل). 2 تا 5 مقدار خوبی است.</td></tr>
+              <tr><td><b>Detail</b></td><td>ریزبینی. کمتر = خطوط نرم‌تر و تمیزتر. بیشتر = جزئیات بیشتر (و شلوغ‌تر).</td></tr>
+              <tr><td><b>Quality</b></td><td>رزولوشن ترسیم: 600 (سریع) تا 1600 (خیلی ریز). برای لوگوهای ریز 1200+ بگذارید.</td></tr>
+              <tr><td><b>Min stroke</b></td><td>حذف خط‌های خیلی کوتاه (نویز) بر حسب سانتی‌مترِ روی تابلو.</td></tr>
+              <tr><td><b>Invert</b></td><td>وقتی شکل روشن روی پس‌زمینهٔ تیره است تیک بزنید.</td></tr>
             </tbody>
           </table>
-          <div class="tip">بهترین نتیجه با عکس‌های پرکنتراست (سیاه روی سفید)، لوگوها و خط‌نویس‌ها به دست می‌آید. عکس‌های عادی یا تاری را اول در یک نرم‌افزار گرافیکی ساده سیاه‌وسفید کنید.</div>
-          <div class="warn">توجه: متن فارسی/انگلیسی داخل نمونهٔ «Cafe Sign» با همین روش تریس شده است. برای متن نئونی خودتان می‌توانید متن را در فتوشاپ/ویرایشگر عکس سیاه روی سفید بنویسید و عکسش را تریس کنید.</div>
+          <div class="tip">اگر قبلاً «تشخیص نمی‌داد»: حالا آستانه خودکار + حذف نویز + برگرداندن نوک خطوط اضافه شده. عکس پرکنتراست بهترین نتیجه را می‌دهد ولی عکس‌های معمولی هم حالا کار می‌کنند. اگر باز هم خطی جا افتاد، Quality را بالا ببرید و Noise removal را کم کنید.</div>
+        </section>
+
+        <section id="hs7b">
+          <h3>۷ب. متن نئونی و حالت دو خطی (TEXT → NEON)</h3>
+          <p>ابزار <b>Text</b> دیگر فقط «نوت» نمی‌گذارد — متن شما <b>مسیر واقعی نئون</b> می‌شود: در جدول برش می‌آید، طولش روی گام 2.5cm اصلاح می‌شود، در همهٔ خروجی‌ها می‌رود و مثل بقیهٔ مسیرها قابل ویرایش است.</p>
+          <ol>
+            <li>ابزار <b>Text</b> (کلید <kbd>T</kbd>) را بزنید و روی تابلو کلیک کنید (جایی که متن باید وسطش بنشیند).</li>
+            <li>متن را بنویسید — <b>فارسی و انگلیسی</b> هر دو پشتیبانی می‌شوند (شکل‌دهی حروف فارسی توسط خود مرورگر انجام می‌شود).</li>
+            <li>فونت، اندازه (سانتی‌متر روی تابلو)، Bold/Italic، فاصله-between حروف را انتخاب کنید.</li>
+            <li>حالت نئون را انتخاب کنید:
+              <ul>
+                <li><b>Centerline — تک‌خط:</b> یک ریسه روی محور هر خطِ حروف (نمای کلاسیک اسکریپت).</li>
+                <li><b>Outline — دو خطی:</b> ریسه از <b>دو طرف هر خطِ حروف</b> می‌گذرد — همان نمای دولاینی/دوخطی که در تابلوهای نئون حرفه‌ای می‌بینید.</li>
+              </ul>
+            </li>
+            <li><b>Create neon text</b> را بزنید.</li>
+          </ol>
+          <div class="tip">برای متن‌های خیلی نازک (فونت‌های Light) تیک <b>Thicken</b> را بزنید تا خطوط حروف کمی قطورتر رسم و پایدارتر ترسیم شوند. اگر متن از عرض تابلو بیرون بزند خودکار کوچک می‌شود.</div>
+          <h4>دو خطی‌کردن هر طرح (نه فقط متن)</h4>
+          <p>هر مسیر دلخواه (دست‌کشیده، تریس‌شده، شکل) را انتخاب کنید و <b>Double Line</b> را بزنید: مسیر به دو خط نئون موازی تبدیل می‌شود. فاصلهٔ دو خط در PROPERTIES → «Double-line gap» تنظیم می‌شود. اگر بخواهید خط وسط هم بماند، در پیام دکمه Cancel را بزنید (۳ مسیر می‌سازد).</p>
+          <div class="warn">حالت Outline/دو خطی و ابزار Double Line هر دو «ریسهٔ دوخطی واقعی» می‌سازند؛ ولی <b>CHANNEL</b> (دو خط چین‌دار دور مسیر) فقط «خطوط برش کانال» برای برش‌دهنده است — با ریسه اشتباه نشود!</div>
+        </section>
+
+        <section id="hs7c">
+          <h3>۷پ. ابزارهای مشابه CorelDRAW</h3>
+          <p>این نسخه، ابزارهای اصلی CorelDRAW که برای طراحی تابلو نئون لازم است را دارد:</p>
+          <table>
+            <thead><tr><th>قابلیت</th><th>توضیح</th></tr></thead>
+            <tbody>
+              <tr><td>اشکال هندسی</td><td>مستطیل/مربع، بیضی/دایره، چندضلعی N-ضلعی، ستاره، مارپیچ — با Shift برای حالت منظم.</td></tr>
+              <tr><td>Freehand / Bezier</td><td>قلم، خط، منحنی بزیه با ادیت رأس‌ها و دستگیره‌های کنترل.</td></tr>
+              <tr><td>Transform</td><td>جابه‌جایی، مقیاس (گوشه‌ها)، کشش (کنارها)، چرخش با ماوس؛ یا عددی در PROPERTIES → TRANSFORM (X/Y/W/H) + چرخش ۹۰± و ۱۵ درجه.</td></tr>
+              <tr><td>Flip / Mirror</td><td>قرینهٔ افقی و عمودی.</td></tr>
+              <tr><td>Order</td><td>To Front / To Back — ترتیب اشیا.</td></tr>
+              <tr><td>Align &amp; Distribute</td><td>تراز به تابلو (۶ حالت) + توزیع یکنواخت فاصله‌ها.</td></tr>
+              <tr><td>Boolean (Shaping)</td><td>Weld (جوش/ادغام)، Trim (برش)، Intersect (اشتراک) — مثل Shaping در CorelDRAW.</td></tr>
+              <tr><td>Duplicate / Copy / Paste</td><td>Ctrl+D / Ctrl+C / Ctrl+V و Select All با Ctrl+A.</td></tr>
+              <tr><td>Artistic Text</td><td>متن با فونت دلخواه → تبدیل به مسیر برداری نئون (بخش ۷ب).</td></tr>
+              <tr><td>Outline / Contour</td><td>Double Line = آفست موازی دوطرفه؛ CHANNEL = کانال برش دوخطی.</td></tr>
+              <tr><td>Object Manager</td><td>تب OBJECTS: فهرست همهٔ اشیا + نمایش/مخفی (👁) + قفل (🔒) + حذف. مسیر مخفی از جدول برش و خروجی‌ها حذف می‌شود (برای طرح مرجع).</td></tr>
+              <tr><td>Color</td><td>رنگ نئون هر مسیر (پالت + رنگ دلخواه) — روی بوم، SVG، PNG و EPS اعمال می‌شود.</td></tr>
+              <tr><td>Zoom / Fit</td><td>بزرگ/کوچک/تناسب با صفحه + کلیدهای + / − / F.</td></tr>
+              <tr><td>خروجی‌ها</td><td>SVG / DXF / <b>EPS (مخصوص CorelDRAW/Illustrator)</b> / PNG / CSV / JSON + CUT DXF/SVG.</td></tr>
+            </tbody>
+          </table>
+          <div class="warn">این برنامه یک <b>CAD ساخت نئون</b> است، نه جایگزین کامل CorelDRAW: ویرایش بیت‌مپ، چندصفحه‌ای، مدیریت رنگ چاپ CMYK و افکت‌های پیچیدهٔ وکتور در آن نیست — ولی برای «طراحی تابلو نئون تا فایل برش» همه‌چیز لازم را دارد.</div>
         </section>
 
         <section id="hs8">
@@ -762,9 +1026,15 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
               <tr><td><kbd>P</kbd></td><td>ابزار Pen</td></tr>
               <tr><td><kbd>L</kbd></td><td>ابزار Line</td></tr>
               <tr><td><kbd>B</kbd></td><td>ابزار Bezier</td></tr>
-              <tr><td><kbd>T</kbd></td><td>ابزار Text</td></tr>
+              <tr><td><kbd>T</kbd></td><td>ابزار Text (متن نئونی)</td></tr>
               <tr><td><kbd>S</kbd></td><td>ابزار Split</td></tr>
               <tr><td><kbd>M</kbd></td><td>ابزار Measure</td></tr>
+              <tr><td><kbd>R</kbd> / <kbd>E</kbd></td><td>مستطیل / بیضی</td></tr>
+              <tr><td><kbd>Y</kbd> / <kbd>G</kbd> / <kbd>I</kbd></td><td>چندضلعی / ستاره / مارپیچ</td></tr>
+              <tr><td><kbd>F</kbd></td><td>Fit Page — تناسب با صفحه</td></tr>
+              <tr><td><kbd>+</kbd> / <kbd>−</kbd></td><td>بزرگ‌نمایی / کوچک‌نمایی</td></tr>
+              <tr><td><kbd>X</kbd></td><td>حذف انتخاب</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd> / <kbd>C</kbd> / <kbd>V</kbd> / <kbd>A</kbd></td><td>تکرار / کپی / چسباندن / انتخاب همه</td></tr>
               <tr><td><kbd>Enter</kbd> / دوکلیک</td><td>پایان ترسیم جاری</td></tr>
               <tr><td><kbd>Esc</kbd></td><td>لغو ترسیم / بستن پنجره / بازگشت به Select</td></tr>
               <tr><td><kbd>Delete</kbd></td><td>حذف انتخاب</td></tr>
@@ -783,12 +1053,14 @@ tr.tot td{color:var(--gold); border-top:2px solid var(--line2);}
           <p>به‌جای سانتی‌متر، کارخانه و تیم برش با «تعداد واحد 2.5cm» کار می‌کنند (مثلاً 50 یعنی 125 سانت). این ستون دقیقاً همان چیزی است که هنگام سفارش و برش لازم دارید.</p>
           <h4>منبع تغذیه چند وات بگیرم؟</h4>
           <p>از تب MATERIALS &amp; POWER مقدار «پیشنهادی» را ببینید. این عدد با ضریب اطمینان (پیش‌فرض 80٪) حساب شده؛ یعنی 20٪ ظرفیت منبع آزاد می‌ماند تا طولانی‌کاری و گرمای کمتری داشته باشید.</p>
-          <h4>تریس عکس تمیز درنیامد؟</h4>
+          <h4>تریس عکس تمیز درنیامد؟ (نسخهٔ ۲)</h4>
           <ul>
-            <li>Threshold را جابه‌جا کنید تا شکل کامل دیده شود.</li>
-            <li>Detail را کم کنید تا خطوط نرم شوند.</li>
-            <li>Min stroke را زیاد کنید تا نویزها حذف شوند.</li>
-            <li>عکس پرکنتراست‌تر (سیاه‌وسفید) استفاده کنید.</li>
+            <li>اول <b>Auto threshold</b> را روشن بگذارید — Otsu خودش بهترین مرز سیاه/سفید را پیدا می‌کند.</li>
+            <li>خط ناقص می‌افتد؟ Quality را به 1200 یا 1600 ببرید و Noise removal را کم کنید.</li>
+            <li>لکه و نویز اضافه می‌آید؟ Noise removal را زیاد کنید (۳ تا ۶) و Min stroke را بالا ببرید.</li>
+            <li>Detail را کم کنید تا خطوط نرم شوند؛ بیشتر برای لوگوهای ریز.</li>
+            <li>برای متن و طرح‌های برجسته، حالت <b>Outline — دو خطی</b> را امتحان کنید: مسیرها دور خطوط می‌افتند و بسیار تمیزتر از قبل تشخیص داده می‌شوند.</li>
+            <li>عکس پرکنتراست (سیاه روی سفید) همیشه بهترین نتیجه را می‌دهد.</li>
           </ul>
           <h4>تفاوت AUTO و MANUAL چیست؟</h4>
           <p>AUTO برای طراحی سریع و مطمئن: همه‌چیز خودکار مرتب می‌شود. MANUAL وقتی لازم است دقیقاً کنترل کنید: کدام نقطه قفل باشد، کجا تقسیم شود، جهت مسیر کدام باشد. حتی در MANUAL هم دکمه‌های Snap Lengths و Optimize در دسترس‌اند.</p>
@@ -1074,6 +1346,7 @@ function buildPieces(project) {
   for (var i = 0; i < project.paths.length; i++) {
     var path = project.paths[i];
     if (!path.points || path.points.length < 2) continue;
+    if (path.hidden) continue; /* hidden = reference art: no cutting, no power */
     var L = pathLength(path);
     if (L < I - EPS) {
       pn++;
@@ -1212,7 +1485,7 @@ function demoProject() {
     settings: {
       intervalCm: 2.5, maxPieceLengthCm: 500, minSpacingCm: 1.5,
       safetyFactor: 80, psuCapacityW: 0, nodeTolCm: 0.5, joinGapCm: 1.0, gridCm: 0.5,
-      channelMm: 10
+      channelMm: 10, shapeSides: 5, starInner: 45, spiralTurns: 3, dblGapCm: 4
     },
     profile: {
       name: "Neon Flex 8mm", widthMm: 8, voltageV: 24,
@@ -1267,7 +1540,9 @@ function rdpSimplify(pts, eps) {
 }
 
 /* ---- polyline offset: double-line cutting channel around a centerline ----
-   d > 0 offsets to the left of the direction of travel, d < 0 to the right. */
+   d > 0 offsets to the left of the direction of travel, d < 0 to the right.
+   Collinear sample points are removed first: otherwise dense edge samples
+   overshoot past the miter join at sharp corners (spikes on the inner side). */
 function offsetPolyline(pts, d, closed) {
   var m = pts.length;
   if (m < 2) return [];
@@ -1277,6 +1552,8 @@ function offsetPolyline(pts, d, closed) {
     P.push({ x: pts[0].x, y: pts[0].y });
     m = P.length;
   }
+  P = rdpSimplify(P, Math.max(0.02, Math.abs(d) * 0.05));
+  m = P.length;
   var nrm = [];
   for (var s = 0; s < m - 1; s++) {
     var dx = P[s + 1].x - P[s].x, dy = P[s + 1].y - P[s].y;
@@ -1348,8 +1625,16 @@ function flattenPath(path, step) {
   return out;
 }
 
-/* ---- raster -> centerline pipeline (image trace / text trace) ---- */
+/* ---- raster pipeline v2 (image trace / text trace / boolean ops) ----
+   Modes:
+     'center'  -> binarize + Zhang-Suen skeleton + centerline chains (neon on the stroke axis)
+     'outline' -> binarize + marching-squares contour tracing (neon follows BOTH edges of
+                  every stroke = the double-line / outline look used on real neon signs) */
 function binarize(rgba, w, h, threshold, invert) {
+  /* threshold === 'auto' -> Otsu (computed once from the histogram) */
+  if (threshold === 'auto' || threshold === null || threshold === undefined) {
+    threshold = otsuThreshold(rgba, w, h);
+  }
   var bin = new Uint8Array(w * h);
   for (var i = 0, p = 0; i < bin.length; i++, p += 4) {
     var lum = 0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2];
@@ -1358,6 +1643,115 @@ function binarize(rgba, w, h, threshold, invert) {
     bin[i] = on ? 1 : 0;
   }
   return bin;
+}
+/* ---- Otsu automatic threshold (between background and ink) ---- */
+function otsuThreshold(rgba, w, h) {
+  var hist = new Array(256);
+  for (var i = 0; i < 256; i++) hist[i] = 0;
+  var n = w * h, p = 0;
+  for (var k = 0; k < n; k++, p += 4) {
+    var lum = (0.299 * rgba[p] + 0.587 * rgba[p + 1] + 0.114 * rgba[p + 2]) | 0;
+    if (lum < 0) lum = 0; else if (lum > 255) lum = 255;
+    hist[lum]++;
+  }
+  var sum = 0;
+  for (var t2 = 0; t2 < 256; t2++) sum += t2 * hist[t2];
+  var sumB = 0, wB = 0, best = 0, thr = 128;
+  for (var t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    var wF = n - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    var mB = sumB / wB, mF = (sum - sumB) / wF;
+    var between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) { best = between; thr = t; }
+  }
+  /* nudge slightly toward the ink side for noisy JPEGs */
+  return Math.min(254, Math.max(2, thr + 6));
+}
+/* ---- despeckle: drop connected ON components smaller than minPx pixels ---- */
+function removeSmallComponents(bin, w, h, minPx) {
+  if (!minPx || minPx < 1) return bin;
+  var seen = new Uint8Array(w * h), stack = [], out = Uint8Array.from ? Uint8Array.from(bin) : bin.slice();
+  for (var i = 0; i < bin.length; i++) {
+    if (!bin[i] || seen[i]) continue;
+    stack.length = 0;
+    stack.push(i);
+    seen[i] = 1;
+    var comp = [i], k = 0;
+    while (k < stack.length) {
+      var id = stack[k++], x = id % w, y = (id / w) | 0;
+      for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          var nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          var nid = ny * w + nx;
+          if (bin[nid] && !seen[nid]) { seen[nid] = 1; stack.push(nid); comp.push(nid); }
+        }
+      }
+    }
+    if (comp.length < minPx) {
+      for (var c = 0; c < comp.length; c++) out[comp[c]] = 0;
+    }
+  }
+  return out;
+}
+/* ---- prune short spurs (whiskers) left by skeletonization ---- */
+function pruneSpurs(skel, w, h, maxLen) {
+  if (!maxLen || maxLen < 1) return skel;
+  var img = Uint8Array.from ? Uint8Array.from(skel) : skel.slice();
+  function deg(id) {
+    var x = id % w, y = (id / w) | 0, d = 0;
+    for (var dy = -1; dy <= 1; dy++) {
+      for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        var nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        if (img[ny * w + nx]) d++;
+      }
+    }
+    return d;
+  }
+  for (var pass = 0; pass < 2; pass++) {
+    var ends = [];
+    for (var id2 = 0; id2 < img.length; id2++) {
+      if (img[id2] && deg(id2) === 1) ends.push(id2);
+    }
+    for (var e = 0; e < ends.length; e++) {
+      var cur = ends[e];
+      if (!img[cur] || deg(cur) !== 1) continue;
+      var collected = [cur];
+      var walk = 0, ok = false;
+      while (walk < maxLen) {
+        var x = cur % w, y = (cur / w) | 0, next = -1, cnt = 0;
+        for (var dy2 = -1; dy2 <= 1; dy2++) {
+          for (var dx2 = -1; dx2 <= 1; dx2++) {
+            if (!dx2 && !dy2) continue;
+            var nx2 = x + dx2, ny2 = y + dy2;
+            if (nx2 < 0 || ny2 < 0 || nx2 >= w || ny2 >= h) continue;
+            var nid2 = ny2 * w + nx2;
+            if (img[nid2]) { cnt++; if (collected.indexOf(nid2) < 0) next = nid2; }
+          }
+        }
+        if (cnt === 0) { ok = true; break; }            /* isolated dot */
+        if (cnt > 1 || next < 0) { ok = walk < maxLen; break; } /* reached a junction */
+        collected.push(next);
+        cur = next;
+        walk++;
+      }
+      if (ok && collected.length <= maxLen + 1 && collected.length > 0) {
+        /* never prune if it is the whole component (2 pts line) and long enough */
+        var total = 0;
+        for (var q = 0; q < img.length; q++) if (img[q]) total++;
+        if (total - collected.length >= 2) {
+          for (var r = 0; r < collected.length; r++) img[collected[r]] = 0;
+        }
+      }
+    }
+  }
+  return img;
 }
 function zhangSuen(bin, w, h) {
   var img = Uint8Array.from ? Uint8Array.from(bin) : Uint8Array.prototype.slice.call(bin);
@@ -1463,6 +1857,64 @@ function traceSkeleton(skel, w, h, minLenPx) {
   }
   return chains;
 }
+/*
+  Zhang-Suen erodes stroke ENDS (a 36px bar skeletonizes to ~31px).
+  extendChainEnds grows each chain endpoint outward along its direction while
+  it stays inside the ORIGINAL blob — the traced neon reaches the true tips.
+*/
+function extendChainEnds(chains, bin, skel, w, h, maxExtend) {
+  maxExtend = maxExtend === undefined ? 10 : maxExtend;
+  function idAt(x, y) {
+    if (x < 0 || y < 0 || x >= w || y >= h) return -1;
+    return y * w + x;
+  }
+  /* degree of a pixel in the SKELETON — 1 = true stroke tip, 3+ = junction */
+  function skelDeg(p) {
+    var d = 0;
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      var id = idAt(p.x + dx, p.y + dy);
+      if (id >= 0 && skel[id]) d++;
+    }
+    return d;
+  }
+  function extend(chain, fromEnd) {
+    if (chain.length < 2) return chain;
+    var n = chain.length;
+    var tip = fromEnd ? chain[n - 1] : chain[0];
+    var prev = fromEnd ? chain[n - 2] : chain[1];
+    if (skelDeg(tip) > 1) return chain; /* junction / loop end — never extend */
+    var dx = tip.x - prev.x, dy = tip.y - prev.y;
+    var dl = Math.sqrt(dx * dx + dy * dy) || 1;
+    dx /= dl; dy /= dl;
+    var added = [];
+    var cx = tip.x, cy = tip.y;
+    for (var s = 0; s < maxExtend; s++) {
+      var nx = Math.round(cx + dx * (s + 1)), ny = Math.round(cy + dy * (s + 1));
+      var id = idAt(nx, ny);
+      if (id < 0 || !bin[id]) break;
+      var pt = { x: nx, y: ny };
+      var clash = false;
+      for (var c = 0; c < chain.length; c++) {
+        if (chain[c].x === nx && chain[c].y === ny) { clash = true; break; }
+      }
+      for (var a = 0; a < added.length; a++) {
+        if (added[a].x === nx && added[a].y === ny) { clash = true; break; }
+      }
+      if (clash) break;
+      added.push(pt);
+    }
+    if (!added.length) return chain;
+    return fromEnd ? chain.concat(added.reverse()) : added.reverse().concat(chain);
+  }
+  var out = [];
+  for (var i = 0; i < chains.length; i++) {
+    var ch = extend(chains[i], false);
+    ch = extend(ch, true);
+    out.push(ch);
+  }
+  return out;
+}
 
 /* ---- catmull-rom control points for a smooth cubic chain through pts ---- */
 function catmullCtrl(pts) {
@@ -1475,6 +1927,118 @@ function catmullCtrl(pts) {
     });
   }
   return ctrl;
+}
+/* catmull-rom for a CLOSED loop (pts[0] == pts[last]); wraps tangents around */
+function catmullCtrlClosed(pts) {
+  var m = pts.length - 1; /* real vertices; pts[m] duplicates pts[0] */
+  var ctrl = [];
+  for (var i = 0; i < m; i++) {
+    var p0 = pts[(i - 1 + m) % m], p1 = pts[i], p2 = pts[i + 1], p3 = pts[(i + 2) % m];
+    ctrl.push({
+      c1: { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+      c2: { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }
+    });
+  }
+  return ctrl;
+}
+
+/* ---- marching-squares contour tracing (OUTLINE / double-line mode) ----
+   Extracts every boundary loop of the ON region (outer borders AND inner holes),
+   with sub-pixel edge midpoints. ON region is kept on the LEFT of each loop.
+   Returns [{pts:[{x,y},...], closed:true}] in pixel coordinates. */
+function traceContours(bin, w, h) {
+  function on(x, y) {
+    if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+    return bin[y * w + x] ? 1 : 0;
+  }
+  /* cell edge mid-points: T=(x+.5,y)  R=(x+1,y+.5)  B=(x+.5,y+1)  L=(x,y+.5) */
+  function ex(x, y, e) {
+    if (e === 0) return x + 0.5;
+    if (e === 1) return x + 1;
+    if (e === 2) return x + 0.5;
+    return x;
+  }
+  function ey(x, y, e) {
+    if (e === 0) return y;
+    if (e === 1) return y + 0.5;
+    if (e === 2) return y + 1;
+    return y + 0.5;
+  }
+  /* oriented segment tables: directed edge pairs [from,to] with ON on the left.
+     saddles (5: TL+BR, 10: TR+BL) are joined because ON pixels are 8-connected */
+  var TAB = {
+    1: [[3, 0]], 2: [[0, 1]], 3: [[3, 1]], 4: [[1, 2]],
+    5: [[1, 0], [3, 2]],
+    6: [[0, 2]], 7: [[3, 2]], 8: [[2, 3]], 9: [[2, 0]],
+    10: [[0, 3], [2, 1]],
+    11: [[2, 1]], 12: [[1, 3]], 13: [[1, 0]], 14: [[0, 3]]
+  };
+  var outMap = {}; /* "x,y" (rounded to quarter px) -> {x,y} exit point */
+  function addSeg(x, y, from, to) {
+    var fx = ex(x, y, from), fy = ey(x, y, from);
+    var tx = ex(x, y, to), ty = ey(x, y, to);
+    outMap[(Math.round(fx * 4)) + ',' + (Math.round(fy * 4))] = { x: tx, y: ty };
+  }
+  for (var yy = -1; yy < h; yy++) {
+    for (var xx = -1; xx < w; xx++) {
+      var v00 = on(xx, yy), v10 = on(xx + 1, yy), v11 = on(xx + 1, yy + 1), v01 = on(xx, yy + 1);
+      var cs = v00 | (v10 << 1) | (v11 << 2) | (v01 << 3);
+      if (!cs || cs === 15) continue;
+      var segs = TAB[cs];
+      if (!segs) continue;
+      for (var s = 0; s < segs.length; s++) addSeg(xx, yy, segs[s][0], segs[s][1]);
+    }
+  }
+  /* stitch directed segments into closed loops */
+  var loops = [], visited = {}, guardMax = w * h * 4 + 64;
+  for (var key in outMap) {
+    if (visited[key]) continue;
+    var loop = [], curKey = key, guard = 0;
+    while (curKey !== undefined && !visited[curKey] && guard < guardMax) {
+      visited[curKey] = 1;
+      var parts = curKey.split(',');
+      loop.push({ x: parseInt(parts[0], 10) / 4, y: parseInt(parts[1], 10) / 4 });
+      var seg = outMap[curKey];
+      curKey = (Math.round(seg.x * 4)) + ',' + (Math.round(seg.y * 4));
+      guard++;
+    }
+    if (loop.length >= 4) loops.push({ pts: loop, closed: true });
+  }
+  return loops;
+}
+/* ---- contour loops -> simplified / smoothed closed path geometry ---- */
+function loopsToGeoms(loops, opts) {
+  opts = opts || {};
+  var eps = opts.eps === undefined ? 1.2 : opts.eps;
+  var minLen = opts.minLenPx === undefined ? 6 : opts.minLenPx;
+  var out = [];
+  for (var l = 0; l < loops.length; l++) {
+    var pts = loops[l].pts;
+    if (!pts || pts.length < 4) continue;
+    /* rotate so the loop starts at the point farthest from the centroid */
+    var cx = 0, cy = 0, i;
+    for (i = 0; i < pts.length; i++) { cx += pts[i].x; cy += pts[i].y; }
+    cx /= pts.length; cy /= pts.length;
+    var far = 0, fd = -1;
+    for (i = 0; i < pts.length; i++) {
+      var dd = (pts[i].x - cx) * (pts[i].x - cx) + (pts[i].y - cy) * (pts[i].y - cy);
+      if (dd > fd) { fd = dd; far = i; }
+    }
+    var rot = pts.slice(far).concat(pts.slice(0, far));
+    if (dist(rot[0], rot[rot.length - 1]) > 1e-9) rot.push({ x: rot[0].x, y: rot[0].y });
+    var simp = rdpSimplify(rot, eps);
+    if (simp.length < 4) continue;
+    /* perimeter filter (noise) */
+    var per = 0;
+    for (i = 1; i < simp.length; i++) per += dist(simp[i - 1], simp[i]);
+    if (per < minLen) continue;
+    if (opts.smooth !== false) {
+      out.push({ type: 'bezier', closed: true, points: simp, ctrl: catmullCtrlClosed(simp) });
+    } else {
+      out.push({ type: 'polyline', closed: true, points: simp, ctrl: null });
+    }
+  }
+  return out;
 }
 
 /* ---- traced chains -> path geometry ({type, points, ctrl}) ---- */
@@ -1498,6 +2062,118 @@ function chainsToPaths(chains, opts) {
     }
   }
   return out;
+}
+
+/* =========================================================================
+   BOOLEAN OPERATIONS (CorelDRAW-style Weld / Trim / Intersect)
+   Pure raster-precision implementation:
+   paths -> scanline even-odd fill masks -> combine -> contour trace -> paths
+   ========================================================================= */
+/* even-odd scanline fill of polygons (array of point arrays) -> mask */
+function fillPolyMask(polys, w, h) {
+  var mask = new Uint8Array(w * h);
+  for (var y = 0; y < h; y++) {
+    var yc = y + 0.5, xs = [];
+    for (var p = 0; p < polys.length; p++) {
+      var poly = polys[p];
+      if (!poly || poly.length < 3) continue;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var a = poly[j], b = poly[i];
+        if ((a.y <= yc && b.y > yc) || (b.y <= yc && a.y > yc)) {
+          var t = (yc - a.y) / (b.y - a.y);
+          xs.push(a.x + t * (b.x - a.x));
+        }
+      }
+    }
+    xs.sort(function (m, n) { return m - n; });
+    for (var k = 0; k + 1 < xs.length; k += 2) {
+      var x0 = Math.max(0, Math.ceil(xs[k] - 0.5));
+      var x1 = Math.min(w - 1, Math.floor(xs[k + 1] - 0.5));
+      for (var x = x0; x <= x1; x++) mask[y * w + x] = 1;
+    }
+  }
+  return mask;
+}
+/* combine two masks: 'or' | 'and' | 'sub' (a minus b) */
+function maskCombine(a, b, op) {
+  var out = new Uint8Array(a.length);
+  if (op === 'or') {
+    for (var i = 0; i < a.length; i++) out[i] = a[i] | b[i];
+  } else if (op === 'and') {
+    for (var j = 0; j < a.length; j++) out[j] = a[j] & b[j];
+  } else {
+    for (var k = 0; k < a.length; k++) out[k] = a[k] & (b[k] ? 0 : 1);
+  }
+  return out;
+}
+/*
+  booleanGeoms(objects, op, pxPerCm)
+  objects : array of path-likes (each flattened to polygons) — first is the TARGET
+  op      : 'weld' | 'trim' | 'intersect'
+  returns new geometry paths in the ORIGINAL coordinate space (cm).
+*/
+function booleanGeoms(objects, op, pxPerCm) {
+  if (!objects || objects.length < 2) return [];
+  pxPerCm = pxPerCm || 6;
+  /* bounding box of everything */
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9, i, j, p;
+  for (i = 0; i < objects.length; i++) {
+    var pts = objects[i];
+    for (j = 0; j < pts.length; j++) {
+      p = pts[j];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (minX > maxX) return [];
+  var pad = 2;
+  var w = Math.max(4, Math.min(4000, Math.ceil((maxX - minX) * pxPerCm) + pad * 2));
+  var h = Math.max(4, Math.min(4000, Math.ceil((maxY - minY) * pxPerCm) + pad * 2));
+  function toPx(poly) {
+    var out = [];
+    for (var k = 0; k < poly.length; k++) {
+      out.push({ x: (poly[k].x - minX) * pxPerCm + pad, y: (poly[k].y - minY) * pxPerCm + pad });
+    }
+    return out;
+  }
+  var masks = [];
+  for (i = 0; i < objects.length; i++) masks.push(fillPolyMask([toPx(objects[i])], w, h));
+  var res;
+  if (op === 'weld') {
+    res = masks[0];
+    for (i = 1; i < masks.length; i++) res = maskCombine(res, masks[i], 'or');
+  } else if (op === 'intersect') {
+    res = masks[0];
+    for (i = 1; i < masks.length; i++) res = maskCombine(res, masks[i], 'and');
+  } else { /* trim: target minus the rest */
+    var rest = masks[1];
+    for (i = 2; i < masks.length; i++) rest = maskCombine(rest, masks[i], 'or');
+    res = maskCombine(masks[0], rest, 'sub');
+  }
+  /* despeckle 1-2 px, then trace outlines */
+  var clean = removeSmallComponents(res, w, h, 6);
+  var loops = traceContours(clean, w, h);
+  var geoms = loopsToGeoms(loops, {
+    eps: Math.max(0.8, pxPerCm * 0.12),
+    smooth: true,
+    minLenPx: pxPerCm * 0.8
+  });
+  /* px -> cm */
+  for (i = 0; i < geoms.length; i++) {
+    for (j = 0; j < geoms[i].points.length; j++) {
+      geoms[i].points[j].x = (geoms[i].points[j].x - pad) / pxPerCm + minX;
+      geoms[i].points[j].y = (geoms[i].points[j].y - pad) / pxPerCm + minY;
+    }
+    if (geoms[i].ctrl) for (var c = 0; c < geoms[i].ctrl.length; c++) {
+      var cc = geoms[i].ctrl[c];
+      if (!cc) continue;
+      cc.c1.x = (cc.c1.x - pad) / pxPerCm + minX; cc.c1.y = (cc.c1.y - pad) / pxPerCm + minY;
+      cc.c2.x = (cc.c2.x - pad) / pxPerCm + minX; cc.c2.y = (cc.c2.y - pad) / pxPerCm + minY;
+    }
+  }
+  return geoms;
 }
 
 /* ---- fit traced geometry into the board (keeps aspect) ---- */
@@ -1545,7 +2221,12 @@ var NEONCORE = {
   demoProject: demoProject, segLength: segLength, splitSeg: splitSeg,
   rdpSimplify: rdpSimplify, offsetPolyline: offsetPolyline, flattenPath: flattenPath,
   binarize: binarize, zhangSuen: zhangSuen, traceSkeleton: traceSkeleton,
-  catmullCtrl: catmullCtrl, chainsToPaths: chainsToPaths, fitPathsToBoard: fitPathsToBoard
+  catmullCtrl: catmullCtrl, chainsToPaths: chainsToPaths, fitPathsToBoard: fitPathsToBoard,
+  otsuThreshold: otsuThreshold, removeSmallComponents: removeSmallComponents,
+  pruneSpurs: pruneSpurs, traceContours: traceContours, loopsToGeoms: loopsToGeoms,
+  extendChainEnds: extendChainEnds,
+  catmullCtrlClosed: catmullCtrlClosed, fillPolyMask: fillPolyMask,
+  maskCombine: maskCombine, booleanGeoms: booleanGeoms
 };
 
 /* =========================================================================
@@ -1567,6 +2248,10 @@ var S = {
   showChannel: false,
   spaceDown: false,
   drag: null, hoverW: null, draft: null, measure: null,
+  shapeDraft: null,   /* rect/ellipse/polygon/star/spiral in-progress */
+  marquee: null,      /* rubber-band selection */
+  clipboard: [],
+  textAt: null,       /* where the TEXT tool was clicked (world cm) */
   undo: [], redo: [],
   dpr: window.devicePixelRatio || 1
 };
@@ -1629,7 +2314,7 @@ function recompute() {
   for (var l = 0; l < S.pieces.length; l++) lens.push(S.pieces[l].lengthCm);
   S.pack = packRolls(lens, pr.profile.rollLengthCm);
   S.issues = runChecks();
-  renderCutList(); renderMaterials(); renderRolls(); renderSel(); renderStatus();
+  renderCutList(); renderMaterials(); renderRolls(); renderSel(); renderStatus(); renderObjects();
   draw();
 }
 function touchesOther(path, which, pr) {
@@ -1716,14 +2401,19 @@ function draw() {
   for (var i = 0; i < pr.paths.length; i++) {
     var path = pr.paths[i];
     if (!path.points || path.points.length < 2) continue;
-    var color = PALETTE[i % PALETTE.length];
+    var color = path.color || PALETTE[i % PALETTE.length];
+    var dim = path.hidden ? 0.25 : 1;
     tracePath(ctx, path);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.strokeStyle = color; ctx.globalAlpha = 0.10; ctx.lineWidth = neonCm * 3.2; ctx.stroke();
-    ctx.globalAlpha = 0.22; ctx.lineWidth = neonCm * 1.9; ctx.stroke();
-    ctx.globalAlpha = 1; ctx.lineWidth = neonCm * 0.9; ctx.stroke();
-    ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.75; ctx.lineWidth = neonCm * 0.28; ctx.stroke();
+    ctx.strokeStyle = color; ctx.globalAlpha = 0.10 * dim; ctx.lineWidth = neonCm * 3.2; ctx.stroke();
+    ctx.globalAlpha = 0.22 * dim; ctx.lineWidth = neonCm * 1.9; ctx.stroke();
+    ctx.globalAlpha = dim; ctx.lineWidth = neonCm * 0.9; ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 0.75 * dim; ctx.lineWidth = neonCm * 0.28; ctx.stroke();
     ctx.globalAlpha = 1;
+    if (path.locked) {
+      ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 0.14; ctx.setLineDash([0.4, 0.4]);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
 
     /* name label at middle */
     var L = pathLength(path);
@@ -1807,6 +2497,70 @@ function draw() {
     }
   }
 
+  /* CorelDRAW-style selection box + transform handles */
+  if (S.sel.length) {
+    var sbb = selBBox();
+    if (sbb) {
+      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 0.18;
+      ctx.setLineDash([0.9, 0.6]);
+      ctx.strokeRect(sbb.minX, sbb.minY, sbb.w, sbb.h);
+      ctx.setLineDash([]);
+      var hs = selHandles(sbb), hs2 = 8 / S.view.zoom, hi;
+      for (hi = 0; hi < hs.length; hi++) {
+        var h = hs[hi];
+        if (h.kind === 'rot') {
+          ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 0.16;
+          ctx.beginPath();
+          ctx.moveTo(h.x, h.y + Math.max(1.2, 10 / S.view.zoom));
+          ctx.lineTo(h.x, sbb.minY);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, Math.max(0.55, 6 / S.view.zoom), 0, Math.PI * 2);
+          ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 0.22; ctx.stroke();
+          ctx.fillStyle = '#fbbf2499'; ctx.fill();
+        } else {
+          var hsz = h.kind === 'corner' ? hs2 : hs2 * 0.72;
+          ctx.fillStyle = h.kind === 'corner' ? '#22d3ee' : '#0e7490';
+          ctx.fillRect(h.x - hsz / 2, h.y - hsz / 2, hsz, hsz);
+          ctx.strokeStyle = '#e0f7ff'; ctx.lineWidth = 0.1;
+          ctx.strokeRect(h.x - hsz / 2, h.y - hsz / 2, hsz, hsz);
+        }
+      }
+    }
+  }
+
+  /* rubber-band marquee */
+  if (S.marquee) {
+    var mq = S.marquee;
+    ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 0.2; ctx.setLineDash([0.8, 0.5]);
+    ctx.strokeRect(Math.min(mq.a.x, mq.b.x), Math.min(mq.a.y, mq.b.y),
+      Math.abs(mq.b.x - mq.a.x), Math.abs(mq.b.y - mq.a.y));
+    ctx.fillStyle = '#22d3ee14';
+    ctx.fillRect(Math.min(mq.a.x, mq.b.x), Math.min(mq.a.y, mq.b.y),
+      Math.abs(mq.b.x - mq.a.x), Math.abs(mq.b.y - mq.a.y));
+    ctx.setLineDash([]);
+  }
+
+  /* shape tool draft preview (rect / ellipse / polygon / star / spiral) */
+  if (S.shapeDraft && S.shapeDraft.b) {
+    var sd = S.shapeDraft;
+    var gm = null;
+    try { gm = buildShapeGeom(sd.tool, sd.a, sd.b, sd.shift); } catch (e) { gm = null; }
+    if (gm) {
+      ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 0.3; ctx.setLineDash([0.7, 0.4]);
+      tracePath(ctx, gm);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    var lbl = sd.tool.toUpperCase();
+    ctx.font = 'bold 2px sans-serif';
+    var lw2 = ctx.measureText(lbl).width;
+    ctx.fillStyle = '#0b0f14cc';
+    ctx.fillRect(sd.b.x + 1, sd.b.y - 3.2, lw2 + 1, 2.4);
+    ctx.fillStyle = '#f472b6';
+    ctx.fillText(lbl, sd.b.x + 1.5, sd.b.y - 1.4);
+  }
+
   /* draft */
   if (S.draft && S.draft.points.length) {
     ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 0.35; ctx.setLineDash([0.8, 0.5]);
@@ -1885,7 +2639,9 @@ function hitPath(w, tolPx) {
   var tol = (tolPx || 8) / S.view.zoom;
   var best = null, bestD = tol;
   for (var i = 0; i < S.project.paths.length; i++) {
-    var path = S.project.paths[i], segs = pathSegs(path);
+    var path = S.project.paths[i];
+    if (path.hidden || path.locked) continue;
+    var segs = pathSegs(path);
     for (var j = 0; j < segs.length; j++) {
       var seg = segs[j], N = 16;
       for (var k = 0; k <= N; k++) {
@@ -1900,6 +2656,7 @@ function hitVertex(w) {
   var tol = 9 / S.view.zoom;
   for (var i = 0; i < S.project.paths.length; i++) {
     var path = S.project.paths[i];
+    if (path.hidden || path.locked) continue;
     for (var j = 0; j < path.points.length; j++) {
       if (dist(path.points[j], w) < tol) return { path: path, index: j, kind: 'pt' };
     }
@@ -1918,6 +2675,8 @@ function hitVertex(w) {
 function setTool(t) {
   S.tool = t;
   S.draft = null;
+  S.shapeDraft = null;
+  S.marquee = null;
   if (t !== 'measure') S.measure = null;
   var els = document.querySelectorAll('.tool[data-tool]');
   for (var i = 0; i < els.length; i++) {
@@ -1998,6 +2757,19 @@ function onPointerDown(ev) {
     return;
   }
   if (S.tool === 'select') {
+    /* 1. transform handles (scale / rotate) */
+    var hd = hitSelHandle(w);
+    if (hd) {
+      pushUndo();
+      S.drag = {
+        kind: hd.kind === 'rot' ? 'rotate' : 'scale',
+        handle: hd, bb: selBBox(), saved: snapshotSel(),
+        start: w, moved: false
+      };
+      draw();
+      return;
+    }
+    /* 2. vertex handles */
     var v = hitVertex(w);
     if (v) {
       pushUndo();
@@ -2005,6 +2777,7 @@ function onPointerDown(ev) {
       if (S.sel.indexOf(v.path.id) < 0) { S.sel = [v.path.id]; renderSel(); }
       return;
     }
+    /* 3. path hit -> select + move */
     var hit = hitPath(w);
     if (hit) {
       if (S.sel.indexOf(hit.path.id) < 0) {
@@ -2014,7 +2787,8 @@ function onPointerDown(ev) {
       pushUndo();
       S.drag = { kind: 'move', last: w, start: w, moved: false };
     } else {
-      S.sel = []; renderSel();
+      /* 4. empty area -> rubber-band marquee selection */
+      S.marquee = { a: w, b: w, shift: ev.shiftKey, moved: false };
     }
     draw();
     return;
@@ -2027,13 +2801,14 @@ function onPointerDown(ev) {
     draw();
     return;
   }
+  if (S.tool === 'rect' || S.tool === 'ellipse' || S.tool === 'polygon' || S.tool === 'star' || S.tool === 'spiral') {
+    S.shapeDraft = { tool: S.tool, a: snapGridPt(w), b: snapGridPt(w), shift: ev.shiftKey };
+    draw();
+    return;
+  }
   if (S.tool === 'text') {
-    var txt = window.prompt('Text to place on the design:', '');
-    if (txt) {
-      pushUndo();
-      S.project.texts.push({ id: newId(), x: w.x, y: w.y, text: txt, sizeCm: 3 });
-      recompute();
-    }
+    S.textAt = w;
+    openTextDialog();
     return;
   }
   if (S.tool === 'split') { splitAtPoint(w); return; }
@@ -2071,7 +2846,7 @@ function onPointerMove(ev) {
     if (Math.abs(w.x - S.drag.start.x) + Math.abs(w.y - S.drag.start.y) > 0.2) S.drag.moved = true;
     for (var i = 0; i < S.sel.length; i++) {
       var path = findPath(S.sel[i]);
-      if (!path) continue;
+      if (!path || path.locked) continue;
       for (var j = 0; j < path.points.length; j++) { path.points[j].x += dx; path.points[j].y += dy; }
       if (path.ctrl) for (var c = 0; c < path.ctrl.length; c++) {
         if (!path.ctrl[c]) continue;
@@ -2080,6 +2855,59 @@ function onPointerMove(ev) {
       }
     }
     S.drag.last = w;
+    draw(); return;
+  }
+  if (S.drag && S.drag.kind === 'rotate') {
+    restoreSaved(S.drag.saved);
+    var bbR = S.drag.bb;
+    var cx = (bbR.minX + bbR.maxX) / 2, cy = (bbR.minY + bbR.maxY) / 2;
+    var a0 = Math.atan2(S.drag.start.y - cy, S.drag.start.x - cx);
+    var a1 = Math.atan2(w.y - cy, w.x - cx);
+    var deg = (a1 - a0) * 180 / Math.PI;
+    if (ev.shiftKey) deg = Math.round(deg / 15) * 15; /* snap to 15 degrees with Shift */
+    for (var ri = 0; ri < S.sel.length; ri++) {
+      var rp = findPath(S.sel[ri]);
+      if (rp && !rp.locked) xformPath(rp, matAbout(matRotate(deg), cx, cy));
+    }
+    S.drag.moved = true;
+    draw(); return;
+  }
+  if (S.drag && S.drag.kind === 'scale') {
+    restoreSaved(S.drag.saved);
+    var bbS = S.drag.bb, hd2 = S.drag.handle;
+    var anchorX = hd2.ax, anchorY = hd2.ay;
+    /* ratio of (pointer - anchor) to (original handle position - anchor), per axis */
+    var fx = (w.x - anchorX) / ((Math.abs(hd2.x - anchorX) < 1e-6) ? 1e-6 : (hd2.x - anchorX));
+    var fy = (w.y - anchorY) / ((Math.abs(hd2.y - anchorY) < 1e-6) ? 1e-6 : (hd2.y - anchorY));
+    var sx = 1, sy = 1;
+    if (hd2.kind === 'corner') {
+      var f = Math.abs(fx) > Math.abs(fy) ? fx : fy;
+      if (ev.shiftKey) f = Math.abs(fx) > Math.abs(fy) ? fy : fx;
+      sx = f; sy = f;
+    } else if (hd2.kind === 'edgeH') {
+      sx = fx;
+    } else {
+      sy = fy;
+    }
+    sx = clamp(sx, -50, 50); sy = clamp(sy, -50, 50);
+    if (Math.abs(sx) < 0.02) sx = 0.02;
+    if (Math.abs(sy) < 0.02) sy = 0.02;
+    var mS = matAbout(matScale(sx, sy), anchorX, anchorY);
+    for (var si = 0; si < S.sel.length; si++) {
+      var spp = findPath(S.sel[si]);
+      if (spp && !spp.locked) xformPath(spp, mS);
+    }
+    S.drag.moved = true;
+    draw(); return;
+  }
+  if (S.marquee) {
+    S.marquee.b = w;
+    if (Math.abs(w.x - S.marquee.a.x) + Math.abs(w.y - S.marquee.a.y) > 0.3) S.marquee.moved = true;
+    draw(); return;
+  }
+  if (S.shapeDraft) {
+    S.shapeDraft.b = snapGridPt(w);
+    S.shapeDraft.shift = ev.shiftKey;
     draw(); return;
   }
   if (S.draft && S.draft.points.length) {
@@ -2097,10 +2925,49 @@ function onPointerMove(ev) {
 function onPointerUp(ev) {
   if (S.drag && S.drag.kind === 'move' && !S.drag.moved) {
     /* simple click on path — no recompute needed */
-  } else if (S.drag && (S.drag.kind === 'vertex' || S.drag.kind === 'move')) {
+  } else if (S.drag && (S.drag.kind === 'vertex' || S.drag.kind === 'move' || S.drag.kind === 'rotate' || S.drag.kind === 'scale')) {
     recompute();
   }
   S.drag = null;
+  if (S.marquee) {
+    if (S.marquee.moved) {
+      var x0 = Math.min(S.marquee.a.x, S.marquee.b.x), x1 = Math.max(S.marquee.a.x, S.marquee.b.x);
+      var y0 = Math.min(S.marquee.a.y, S.marquee.b.y), y1 = Math.max(S.marquee.a.y, S.marquee.b.y);
+      var picked = (S.marquee.shift) ? S.sel.slice() : [];
+      for (var i = 0; i < S.project.paths.length; i++) {
+        var p = S.project.paths[i];
+        if (p.hidden || p.locked) continue;
+        var bb = pathBBoxOf(p);
+        if (!bb) continue;
+        if (bb.minX >= x0 && bb.maxX <= x1 && bb.minY >= y0 && bb.maxY <= y1) {
+          if (picked.indexOf(p.id) < 0) picked.push(p.id);
+        }
+      }
+      S.sel = picked;
+      renderSel(); renderObjects();
+      setStatus(picked.length + ' path(s) selected.', '');
+    } else {
+      S.sel = []; renderSel(); renderObjects();
+    }
+    S.marquee = null;
+    draw();
+  }
+  if (S.shapeDraft) {
+    var sd = S.shapeDraft;
+    S.shapeDraft = null;
+    var gm = null;
+    try { gm = buildShapeGeom(sd.tool, sd.a, sd.b, sd.shift); } catch (e) { gm = null; }
+    if (gm) {
+      pushUndo();
+      var wrapped = wrapGeoms([gm]);
+      S.project.paths.push(wrapped[0]);
+      S.sel = [wrapped[0].id];
+      recompute();
+      setStatus(sd.tool.toUpperCase() + ' created — drag the white vertices or cyan handles to edit.', 'ok');
+    } else {
+      draw();
+    }
+  }
 }
 function onWheel(ev) {
   ev.preventDefault();
@@ -2211,8 +3078,8 @@ function renderSel() {
   $('selInfo').style.display = 'block';
   var L = pathLength(path);
   var I = S.project.profile.intervalCm;
-  $('selName').textContent = path.name;
-  $('selLen').textContent = fmt(Math.round(L * 1000) / 1000) + ' cm';
+  $('selName').textContent = (ids.length > 1 ? ids.length + ' paths — ' : '') + path.name;
+  $('selLen').textContent = fmt(Math.round(L * 1000) / 1000) + ' cm' + (ids.length > 1 ? ' (first)' : '');
   $('selLen2').textContent = (path.snapped ? fmt(Math.round(snapTarget(L, I) * 1000) / 1000) + ' cm' : 'not snapped');
   var pcs = [];
   for (var i = 0; i < S.pieces.length; i++) if (S.pieces[i].pathId === path.id) pcs.push(S.pieces[i]);
@@ -2222,6 +3089,14 @@ function renderSel() {
   $('selNote').value = path.note || '';
   $('selLockS').classList.toggle('primary', !!path.lockedStart);
   $('selLockE').classList.toggle('primary', !!path.lockedEnd);
+  /* transform inputs */
+  var bb = selBBox();
+  if (bb && $('tfX')) {
+    $('tfX').value = Math.round(bb.minX * 100) / 100;
+    $('tfY').value = Math.round(bb.minY * 100) / 100;
+    $('tfW').value = Math.round(bb.w * 100) / 100;
+    $('tfH').value = Math.round(bb.h * 100) / 100;
+  }
 }
 function renderStatus() {
   if (!$('stTotal')) return;
@@ -2449,8 +3324,8 @@ function svgBody() {
   var neonCm = (pr.profile.widthMm || 8) / 10;
   for (var i = 0; i < pr.paths.length; i++) {
     var path = pr.paths[i];
-    if (!path.points || path.points.length < 2) continue;
-    var color = PALETTE[i % PALETTE.length];
+    if (!path.points || path.points.length < 2 || path.hidden) continue;
+    var color = path.color || PALETTE[i % PALETTE.length];
     a.push('<path d="' + pathD(path) + '" fill="none" stroke="' + color + '" stroke-width="' + fnum(neonCm * 0.9) +
       '" stroke-linecap="round" stroke-linejoin="round"/>');
     var L = pathLength(path), mid = pathPointAt(path, L / 2);
@@ -2502,7 +3377,7 @@ function exportDXF() {
   push('0'); push('SECTION'); push('2'); push('ENTITIES');
   for (var i = 0; i < pr.paths.length; i++) {
     var path = pr.paths[i];
-    if (!path.points || path.points.length < 2) continue;
+    if (!path.points || path.points.length < 2 || path.hidden) continue;
     var segs = pathSegs(path), layer = 'NEON';
     for (var j = 0; j < segs.length; j++) {
       var seg = segs[j], steps = seg.c1 ? 12 : 1, prev = seg.a;
@@ -2555,8 +3430,8 @@ function renderStandalone(scale) {
   var neonCm = (pr.profile.widthMm || 8) / 10;
   for (var i = 0; i < pr.paths.length; i++) {
     var path = pr.paths[i];
-    if (!path.points || path.points.length < 2) continue;
-    var color = PALETTE[i % PALETTE.length];
+    if (!path.points || path.points.length < 2 || path.hidden) continue;
+    var color = path.color || PALETTE[i % PALETTE.length];
     tracePath(ctx, path);
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.strokeStyle = color; ctx.lineWidth = neonCm * 1.6; ctx.globalAlpha = 0.25; ctx.stroke();
@@ -2985,6 +3860,10 @@ function syncPropsFromProject() {
   $('propGrid').value = pr.settings.gridCm;
   $('propNodeTol').value = pr.settings.nodeTolCm;
   $('propChannel').value = pr.settings.channelMm || 10;
+  $('propSides').value = pr.settings.shapeSides || 5;
+  $('propStarInner').value = pr.settings.starInner || 45;
+  $('propSpiral').value = pr.settings.spiralTurns || 3;
+  $('propDblGap').value = pr.settings.dblGapCm || 4;
   $('profName').value = pr.profile.name || '';
   refreshProfileSel();
 }
@@ -3007,6 +3886,10 @@ function readProps() {
   pr.settings.gridCm = Math.max(0.05, num($('propGrid').value, 0.5));
   pr.settings.nodeTolCm = Math.max(0.05, num($('propNodeTol').value, 0.5));
   pr.settings.channelMm = Math.max(1, num($('propChannel').value, 10));
+  pr.settings.shapeSides = clamp(Math.round(num($('propSides').value, 5)), 3, 60);
+  pr.settings.starInner = clamp(num($('propStarInner').value, 45), 10, 95);
+  pr.settings.spiralTurns = clamp(Math.round(num($('propSpiral').value, 3)), 1, 10);
+  pr.settings.dblGapCm = Math.max(0.5, num($('propDblGap').value, 4));
 }
 
 /* ---- path edit helpers ---- */
@@ -3042,6 +3925,559 @@ function snapAll() {
 }
 
 /* =========================================================================
+   CORELDRAW-STYLE TOOLKIT — transforms, shapes, align, order, boolean,
+   double-line, clipboard, objects manager, zoom helpers
+   ========================================================================= */
+
+/* ---- matrices {a,b,c,d,e,f}: x' = a*x + c*y + e ; y' = b*x + d*y + f ---- */
+function matMul(m1, m2) {
+  return {
+    a: m1.a * m2.a + m1.c * m2.b,
+    b: m1.b * m2.a + m1.d * m2.b,
+    c: m1.a * m2.c + m1.c * m2.d,
+    d: m1.b * m2.c + m1.d * m2.d,
+    e: m1.a * m2.e + m1.c * m2.f + m1.e,
+    f: m1.b * m2.e + m1.d * m2.f + m1.f
+  };
+}
+function matTranslate(dx, dy) { return { a: 1, b: 0, c: 0, d: 1, e: dx, f: dy }; }
+function matScale(sx, sy) { return { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 }; }
+function matRotate(deg) {
+  var r = deg * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
+  return { a: co, b: si, c: -si, d: co, e: 0, f: 0 };
+}
+function matApply(p, m) {
+  return { x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f };
+}
+function matAbout(m, cx, cy) {
+  return matMul(matTranslate(cx, cy), matMul(m, matTranslate(-cx, -cy)));
+}
+function xformPath(path, m) {
+  for (var i = 0; i < path.points.length; i++) path.points[i] = matApply(path.points[i], m);
+  if (path.ctrl) for (var c = 0; c < path.ctrl.length; c++) {
+    var cc = path.ctrl[c];
+    if (!cc) continue;
+    cc.c1 = matApply(cc.c1, m); cc.c2 = matApply(cc.c2, m);
+  }
+  path.snapped = false;
+}
+function xformGeoms(geoms, m) {
+  for (var i = 0; i < geoms.length; i++) {
+    for (var j = 0; j < geoms[i].points.length; j++) geoms[i].points[j] = matApply(geoms[i].points[j], m);
+    if (geoms[i].ctrl) for (var c = 0; c < geoms[i].ctrl.length; c++) {
+      var cc = geoms[i].ctrl[c];
+      if (!cc) continue;
+      cc.c1 = matApply(cc.c1, m); cc.c2 = matApply(cc.c2, m);
+    }
+  }
+  return geoms;
+}
+
+/* ---- bounding boxes ---- */
+function pathBBoxOf(path) {
+  var pts = flattenPath(path, 1.0), minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  for (var i = 0; i < pts.length; i++) {
+    if (pts[i].x < minX) minX = pts[i].x;
+    if (pts[i].y < minY) minY = pts[i].y;
+    if (pts[i].x > maxX) maxX = pts[i].x;
+    if (pts[i].y > maxY) maxY = pts[i].y;
+  }
+  if (minX > maxX) return null;
+  return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
+}
+function selBBox() {
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (!p) continue;
+    var bb = pathBBoxOf(p);
+    if (!bb) continue;
+    if (bb.minX < minX) minX = bb.minX;
+    if (bb.minY < minY) minY = bb.minY;
+    if (bb.maxX > maxX) maxX = bb.maxX;
+    if (bb.maxY > maxY) maxY = bb.maxY;
+  }
+  if (minX > maxX) return null;
+  return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
+}
+
+/* ---- selection transform handles (CorelDRAW-style) ---- */
+function selHandles(bb) {
+  if (!bb) return [];
+  return [
+    { id: 'nw', x: bb.minX, y: bb.minY, kind: 'corner', ax: bb.maxX, ay: bb.maxY },
+    { id: 'ne', x: bb.maxX, y: bb.minY, kind: 'corner', ax: bb.minX, ay: bb.maxY },
+    { id: 'sw', x: bb.minX, y: bb.maxY, kind: 'corner', ax: bb.maxX, ay: bb.minY },
+    { id: 'se', x: bb.maxX, y: bb.maxY, kind: 'corner', ax: bb.minX, ay: bb.minY },
+    { id: 'n', x: (bb.minX + bb.maxX) / 2, y: bb.minY, kind: 'edgeV', ax: (bb.minX + bb.maxX) / 2, ay: bb.maxY },
+    { id: 's', x: (bb.minX + bb.maxX) / 2, y: bb.maxY, kind: 'edgeV', ax: (bb.minX + bb.maxX) / 2, ay: bb.minY },
+    { id: 'w', x: bb.minX, y: (bb.minY + bb.maxY) / 2, kind: 'edgeH', ax: bb.maxX, ay: (bb.minY + bb.maxY) / 2 },
+    { id: 'e', x: bb.maxX, y: (bb.minY + bb.maxY) / 2, kind: 'edgeH', ax: bb.minX, ay: (bb.minY + bb.maxY) / 2 },
+    { id: 'rot', x: (bb.minX + bb.maxX) / 2, y: bb.minY - Math.max(2.5, 14 / S.view.zoom), kind: 'rot', ax: 0, ay: 0 }
+  ];
+}
+function hitSelHandle(w) {
+  if (!S.sel.length) return null;
+  var bb = selBBox();
+  if (!bb) return null;
+  var hs = selHandles(bb), tol = 9 / S.view.zoom, best = null, bd = tol;
+  for (var i = 0; i < hs.length; i++) {
+    var d = dist(hs[i], w);
+    if (d < bd) { bd = d; best = hs[i]; }
+  }
+  return best;
+}
+function restoreSaved(saved) {
+  for (var i = 0; i < saved.length; i++) {
+    var p = findPath(saved[i].id);
+    if (!p) continue;
+    p.points = JSON.parse(JSON.stringify(saved[i].points));
+    p.ctrl = saved[i].ctrl ? JSON.parse(JSON.stringify(saved[i].ctrl)) : null;
+  }
+}
+function snapshotSel() {
+  var out = [];
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) out.push({ id: p.id, points: JSON.parse(JSON.stringify(p.points)), ctrl: p.ctrl ? JSON.parse(JSON.stringify(p.ctrl)) : null });
+  }
+  return out;
+}
+
+/* ---- shape builders for the drawing tools ---- */
+function buildShapeGeom(tool, a, b, shift) {
+  var x0 = a.x, y0 = a.y, x1 = b.x, y1 = b.y;
+  var w = x1 - x0, h = y1 - y0;
+  if (Math.abs(w) < 0.05 && Math.abs(h) < 0.05) return null;
+  if (tool === 'rect') {
+    if (shift) { /* square */
+      var s = Math.max(Math.abs(w), Math.abs(h));
+      x1 = x0 + (w < 0 ? -s : s); y1 = y0 + (h < 0 ? -s : s);
+    }
+    return {
+      type: 'polyline', closed: true, ctrl: null,
+      points: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }, { x: x0, y: y0 }],
+      note: 'Rectangle'
+    };
+  }
+  if (tool === 'ellipse') {
+    if (shift) { /* circle */
+      var sc = Math.max(Math.abs(w), Math.abs(h));
+      x1 = x0 + (w < 0 ? -sc : sc); y1 = y0 + (h < 0 ? -sc : sc);
+    }
+    var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = Math.abs(x1 - x0) / 2, ry = Math.abs(y1 - y0) / 2;
+    if (rx < 0.05 || ry < 0.05) return null;
+    var kx = 0.5522847498 * rx, ky = 0.5522847498 * ry;
+    return {
+      type: 'bezier', closed: true,
+      points: [{ x: cx + rx, y: cy }, { x: cx, y: cy + ry }, { x: cx - rx, y: cy }, { x: cx, y: cy - ry }, { x: cx + rx, y: cy }],
+      ctrl: [
+        { c1: { x: cx + rx, y: cy + ky }, c2: { x: cx + kx, y: cy + ry } },
+        { c1: { x: cx - kx, y: cy + ry }, c2: { x: cx - rx, y: cy + ky } },
+        { c1: { x: cx - rx, y: cy - ky }, c2: { x: cx - kx, y: cy - ry } },
+        { c1: { x: cx + kx, y: cy - ry }, c2: { x: cx + rx, y: cy - ky } }
+      ],
+      note: 'Ellipse'
+    };
+  }
+  if (tool === 'polygon' || tool === 'star') {
+    var R = dist(a, b);
+    if (R < 0.3) return null;
+    var n = Math.max(3, Math.round(S.project.settings.shapeSides || 5));
+    var pts = [], i, ang;
+    if (tool === 'polygon') {
+      for (i = 0; i < n; i++) {
+        ang = -Math.PI / 2 + i * 2 * Math.PI / n;
+        pts.push({ x: a.x + Math.cos(ang) * R, y: a.y + Math.sin(ang) * R });
+      }
+      pts.push({ x: pts[0].x, y: pts[0].y });
+      return { type: 'polyline', closed: true, ctrl: null, points: pts, note: 'Polygon ' + n };
+    }
+    var inner = clamp((S.project.settings.starInner || 45) / 100, 0.1, 0.95);
+    for (i = 0; i < 2 * n; i++) {
+      ang = -Math.PI / 2 + i * Math.PI / n;
+      var rr = (i % 2 === 0) ? R : R * inner;
+      pts.push({ x: a.x + Math.cos(ang) * rr, y: a.y + Math.sin(ang) * rr });
+    }
+    pts.push({ x: pts[0].x, y: pts[0].y });
+    return { type: 'polyline', closed: true, ctrl: null, points: pts, note: 'Star ' + n };
+  }
+  if (tool === 'spiral') {
+    var R2 = dist(a, b);
+    if (R2 < 0.5) return null;
+    var turns = clamp(Math.round((S.project.settings.spiralTurns || 3)), 1, 10);
+    var total = turns * 2 * Math.PI, steps = turns * 72, pts2 = [], i2;
+    for (i2 = 0; i2 <= steps; i2++) {
+      var t = i2 / steps, th = t * total, r = R2 * t;
+      pts2.push({ x: a.x + Math.cos(th) * r, y: a.y + Math.sin(th) * r });
+    }
+    return { type: 'bezier', closed: false, points: pts2, ctrl: catmullCtrl(pts2), note: 'Spiral' };
+  }
+  return null;
+}
+
+/* ---- clipboard / duplicate / select-all ---- */
+function copySelection() {
+  if (!S.sel.length) { setStatus('Nothing selected.', 'warn'); return; }
+  var out = [];
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) out.push(JSON.parse(JSON.stringify(p)));
+  }
+  S.clipboard = out;
+  setStatus('Copied ' + out.length + ' path(s).', 'ok');
+}
+function pasteClipboard() {
+  if (!S.clipboard || !S.clipboard.length) { setStatus('Clipboard is empty.', 'warn'); return; }
+  pushUndo();
+  var ids = [];
+  for (var i = 0; i < S.clipboard.length; i++) {
+    var np = JSON.parse(JSON.stringify(S.clipboard[i]));
+    np.id = newId();
+    np.lockedStart = false; np.lockedEnd = false;
+    xformPath(np, matTranslate(3, 3));
+    S.project.paths.push(np);
+    ids.push(np.id);
+  }
+  S.sel = ids;
+  recompute();
+  setStatus('Pasted ' + ids.length + ' path(s).', 'ok');
+}
+function duplicateSelection() {
+  if (!S.sel.length) { setStatus('Nothing selected.', 'warn'); return; }
+  S.clipboard = [];
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) S.clipboard.push(JSON.parse(JSON.stringify(p)));
+  }
+  pasteClipboard();
+}
+function selectAll() {
+  S.sel = [];
+  for (var i = 0; i < S.project.paths.length; i++) {
+    if (!S.project.paths[i].hidden && !S.project.paths[i].locked) S.sel.push(S.project.paths[i].id);
+  }
+  renderSel(); renderObjects(); draw();
+  setStatus(S.sel.length + ' path(s) selected.', '');
+}
+
+/* ---- flip / rotate / order ---- */
+function flipSelection(horiz) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var bb = selBBox();
+  var cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) xformPath(p, matAbout(horiz ? matScale(-1, 1) : matScale(1, -1), cx, cy));
+  }
+  recompute();
+  setStatus(horiz ? 'Flipped horizontally.' : 'Flipped vertically.', 'ok');
+}
+function rotateSelection(deg) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var bb = selBBox(), cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) xformPath(p, matAbout(matRotate(deg), cx, cy));
+  }
+  recompute();
+  setStatus('Rotated ' + fmt(deg) + ' degrees.', 'ok');
+}
+function orderSelection(where) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var moving = [], rest = [];
+  for (var i = 0; i < S.project.paths.length; i++) {
+    if (S.sel.indexOf(S.project.paths[i].id) >= 0) moving.push(S.project.paths[i]);
+    else rest.push(S.project.paths[i]);
+  }
+  if (where === 'front') S.project.paths = rest.concat(moving);
+  else if (where === 'back') S.project.paths = moving.concat(rest);
+  else {
+    /* forward / backward by one */
+    var arr = S.project.paths.slice();
+    var idxs = [];
+    for (var j = 0; j < arr.length; j++) if (S.sel.indexOf(arr[j].id) >= 0) idxs.push(j);
+    if (where === 'forward') {
+      for (var k = idxs.length - 1; k >= 0; k--) {
+        var ix = idxs[k];
+        if (ix < arr.length - 1 && S.sel.indexOf(arr[ix + 1].id) < 0) {
+          var tmp = arr[ix]; arr[ix] = arr[ix + 1]; arr[ix + 1] = tmp;
+        }
+      }
+    } else {
+      for (var k2 = 0; k2 < idxs.length; k2++) {
+        var ix2 = idxs[k2];
+        if (ix2 > 0 && S.sel.indexOf(arr[ix2 - 1].id) < 0) {
+          var tmp2 = arr[ix2]; arr[ix2] = arr[ix2 - 1]; arr[ix2 - 1] = tmp2;
+        }
+      }
+    }
+    S.project.paths = arr;
+  }
+  recompute();
+  setStatus(where === 'front' ? 'Brought to front.' : where === 'back' ? 'Sent to back.' : 'Order changed.', 'ok');
+}
+
+/* ---- align & distribute (relative to the board, CorelDRAW-style) ---- */
+function alignSelection(mode) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var B = S.project.board;
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (!p) continue;
+    var bb = pathBBoxOf(p);
+    if (!bb) continue;
+    var dx = 0, dy = 0;
+    if (mode === 'left') dx = -bb.minX;
+    if (mode === 'right') dx = B.widthCm - bb.maxX;
+    if (mode === 'chcenter') dx = (B.widthCm - bb.w) / 2 - bb.minX;
+    if (mode === 'top') dy = -bb.minY;
+    if (mode === 'bottom') dy = B.heightCm - bb.maxY;
+    if (mode === 'vcenter') dy = (B.heightCm - bb.h) / 2 - bb.minY;
+    if (dx || dy) xformPath(p, matTranslate(dx, dy));
+  }
+  recompute();
+  setStatus('Aligned: ' + mode + ' (relative to board).', 'ok');
+}
+function distributeSelection(axis) {
+  if (S.sel.length < 3) { setStatus('Select at least 3 paths to distribute.', 'warn'); return; }
+  pushUndo();
+  var items = [];
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) items.push({ path: p, bb: pathBBoxOf(p) });
+  }
+  var B = S.project.board;
+  if (axis === 'h') {
+    items.sort(function (a, b) { return a.bb.minX - b.bb.minX; });
+    var sumW = 0;
+    for (var j = 0; j < items.length; j++) sumW += items[j].bb.w;
+    var gap = Math.max(0, (B.widthCm - sumW) / (items.length - 1));
+    var cur = 0;
+    for (var k = 0; k < items.length; k++) {
+      var dx = cur - items[k].bb.minX;
+      if (dx) xformPath(items[k].path, matTranslate(dx, 0));
+      cur += items[k].bb.w + gap;
+    }
+  } else {
+    items.sort(function (a, b) { return a.bb.minY - b.bb.minY; });
+    var sumH = 0;
+    for (var j2 = 0; j2 < items.length; j2++) sumH += items[j2].bb.h;
+    var gap2 = Math.max(0, (B.heightCm - sumH) / (items.length - 1));
+    var cur2 = 0;
+    for (var k2 = 0; k2 < items.length; k2++) {
+      var dy = cur2 - items[k2].bb.minY;
+      if (dy) xformPath(items[k2].path, matTranslate(0, dy));
+      cur2 += items[k2].bb.h + gap2;
+    }
+  }
+  recompute();
+  setStatus('Distributed ' + (axis === 'h' ? 'horizontally' : 'vertically') + ' across the board.', 'ok');
+}
+
+/* ---- DOUBLE LINE: replace selected centerline(s) with two parallel neon lines ---- */
+function doubleLineSelection(keepCenter) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var gapCm = Math.max(0.5, S.project.settings.dblGapCm || 4);
+  var half = gapCm / 2;
+  var out = [], made = 0;
+  for (var i = 0; i < S.project.paths.length; i++) {
+    var path = S.project.paths[i];
+    if (S.sel.indexOf(path.id) < 0) { out.push(path); continue; }
+    var pts = flattenPath(path, 0.5);
+    if (pts.length < 2) { out.push(path); continue; }
+    var closed = dist(pts[0], pts[pts.length - 1]) < 1e-6;
+    var L = pathTypeLabel(path);
+    var a = offsetPolyline(pts, half, closed);
+    var b = offsetPolyline(pts, -half, closed);
+    var ga = { type: 'polyline', closed: closed, points: a, ctrl: null, note: 'DBL-A ' + L };
+    var gb = { type: 'polyline', closed: closed, points: b, ctrl: null, note: 'DBL-B ' + L };
+    if (keepCenter) {
+      out.push(wrapGeoms([ga])[0]);
+      out.push(wrapGeoms([gb])[0]);
+      var cClone = clonePath(path);
+      cClone.id = newId(); cClone.note = 'DBL-CENTER';
+      out.push(cClone);
+    } else {
+      out.push(wrapGeoms([ga])[0]);
+      out.push(wrapGeoms([gb])[0]);
+    }
+    made++;
+  }
+  S.project.paths = out;
+  S.sel = [];
+  recompute();
+  setStatus('Double line: ' + made + ' path(s) -> two parallel neon lines (gap ' + fmt(gapCm) + ' cm).', 'ok');
+}
+function pathTypeLabel(path) {
+  return (path.note || path.name || 'path').toString().slice(0, 24);
+}
+
+/* ---- BOOLEAN: Weld / Trim / Intersect (raster-precision, for closed shapes) ---- */
+function booleanSelection(op) {
+  if (S.sel.length < 2) {
+    setStatus('Boolean ' + op + ': select at least 2 paths (works best on closed shapes).', 'warn');
+    return;
+  }
+  var objects = [], selPaths = [];
+  for (var i = 0; i < S.project.paths.length; i++) {
+    var p = S.project.paths[i];
+    if (S.sel.indexOf(p.id) >= 0) { selPaths.push(p); objects.push(flattenPath(p, 1.0)); }
+  }
+  if (selPaths.length < 2) return;
+  var pxPerCm = 6;
+  var geoms = booleanGeoms(objects, op, pxPerCm);
+  if (!geoms.length) { setStatus('Boolean ' + op + ': result is empty.', 'warn'); return; }
+  pushUndo();
+  var insertAt = S.project.paths.indexOf(selPaths[0]);
+  var ids = [];
+  for (var s = 0; s < S.sel.length; s++) {
+    var ix = S.project.paths.indexOf(selPaths[s]);
+    if (ix >= 0) S.project.paths.splice(ix, 1);
+  }
+  var wrapped = wrapGeoms(geoms);
+  for (var g = 0; g < wrapped.length; g++) {
+    wrapped[g].note = op.toUpperCase() + ' result';
+    S.project.paths.splice(Math.max(0, insertAt) + g, 0, wrapped[g]);
+    ids.push(wrapped[g].id);
+  }
+  S.sel = ids;
+  recompute();
+  setStatus('Boolean ' + op.toUpperCase() + ' done: ' + wrapped.length + ' path(s).', 'ok');
+}
+
+/* ---- set neon color of selection ---- */
+function setSelectionColor(hex) {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) p.color = hex;
+  }
+  recompute();
+  setStatus('Neon color set: ' + hex, 'ok');
+}
+
+/* ---- zoom helpers ---- */
+function zoomStep(f) {
+  var cv = $('cv'), r = cv.getBoundingClientRect();
+  var mx = r.width / 2, my = r.height / 2;
+  var wx = S.view.x + mx / S.view.zoom, wy = S.view.y + my / S.view.zoom;
+  S.view.zoom = clamp(S.view.zoom * f, 0.25, 80);
+  S.view.x = wx - mx / S.view.zoom;
+  S.view.y = wy - my / S.view.zoom;
+  $('stZoom').innerHTML = 'zoom: ' + Math.round(S.view.zoom / 7.5 * 100) + '%';
+  draw();
+}
+function zoomFit() {
+  var cv = $('cv'), r = cv.getBoundingClientRect();
+  var B = S.project.board;
+  var m = 0.92;
+  var zx = (r.width * m) / Math.max(B.widthCm, 1);
+  var zy = (r.height * m) / Math.max(B.heightCm, 1);
+  S.view.zoom = clamp(Math.min(zx, zy), 0.25, 80);
+  S.view.x = (B.widthCm - r.width / S.view.zoom) / 2;
+  S.view.y = (B.heightCm - r.height / S.view.zoom) / 2;
+  $('stZoom').innerHTML = 'zoom: ' + Math.round(S.view.zoom / 7.5 * 100) + '%';
+  draw();
+  setStatus('Fit to page.', '');
+}
+
+/* ---- transform panel apply (X / Y / W / H) ---- */
+function applyTransformInputs() {
+  if (!S.sel.length) { setStatus('Select path(s) first.', 'warn'); return; }
+  pushUndo();
+  var bb = selBBox();
+  if (!bb) return;
+  var nx = num($('tfX').value, bb.minX), ny = num($('tfY').value, bb.minY);
+  var nw = Math.max(0.05, num($('tfW').value, bb.w)), nh = Math.max(0.05, num($('tfH').value, bb.h));
+  /* scale about the bbox min corner, then move to the typed position */
+  var m = matMul(matTranslate(nx - bb.minX, ny - bb.minY), matAbout(matScale(nw / Math.max(bb.w, 1e-6), nh / Math.max(bb.h, 1e-6)), bb.minX, bb.minY));
+  for (var i = 0; i < S.sel.length; i++) {
+    var p = findPath(S.sel[i]);
+    if (p) xformPath(p, m);
+  }
+  recompute();
+  setStatus('Transform applied.', 'ok');
+}
+
+/* ---- OBJECTS manager (CorelDRAW Object Manager style) ---- */
+function renderObjects() {
+  var tb = $('objBody');
+  if (!tb) return;
+  var html = '';
+  for (var i = 0; i < S.project.paths.length; i++) {
+    var p = S.project.paths[i];
+    var L = 0;
+    try { L = pathLength(p); } catch (e) { }
+    var col = p.color || PALETTE[i % PALETTE.length];
+    var sel = S.sel.indexOf(p.id) >= 0;
+    html += '<tr' + (sel ? ' style="background:#14202c"' : '') + '>' +
+      '<td class="num">' + (i + 1) + '</td>' +
+      '<td><span class="dot" style="background:' + col + '"></span> <b class="obj-name" data-id="' + p.id + '" style="cursor:pointer">' + esc(p.name || '(unnamed)') + '</b>' +
+      (p.note ? ' <small style="color:#8fa3b8">' + esc(String(p.note).slice(0, 18)) + '</small>' : '') + '</td>' +
+      '<td class="num">' + fmt(Math.round(L * 10) / 10) + ' cm</td>' +
+      '<td class="num">' + (p.snapped ? '✓' : '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+      '<button class="btn sm obj-eye" data-id="' + p.id + '" title="Show / hide (hidden paths stay out of the cut list and exports)">' + (p.hidden ? '🚫' : '👁') + '</button> ' +
+      '<button class="btn sm obj-lock" data-id="' + p.id + '" title="Lock / unlock (locked paths cannot be edited)">' + (p.locked ? '🔒' : '🔓') + '</button> ' +
+      '<button class="btn sm obj-del" data-id="' + p.id + '" title="Delete">✖</button></td></tr>';
+  }
+  if (!S.project.paths.length) html = '<tr><td colspan="5" class="hint">No objects yet — draw with the tools or use TEXT / TRACE IMAGE.</td></tr>';
+  tb.innerHTML = html;
+}
+
+/* ---- EPS export (opens cleanly in CorelDRAW / Illustrator) ---- */
+function exportEPS() {
+  var pr = S.project, W = pr.board.widthCm, H = pr.board.heightCm;
+  var PT = 28.3464566929; /* points per cm */
+  var o = [];
+  o.push('%!PS-Adobe-3.0 EPSF-3.0');
+  o.push('%%BoundingBox: 0 0 ' + Math.ceil(W * PT) + ' ' + Math.ceil(H * PT));
+  o.push('%%Title: ' + (pr.name || 'NEON CAD project'));
+  o.push('%%Creator: NEON CAD');
+  o.push('%%EndComments');
+  o.push('/m {moveto} bind def /l {lineto} bind def /c {curveto} bind def /s {stroke} bind def');
+  o.push('0 setlinewidth 1 setlinejoin 1 setlinecap');
+  function Y(y) { return (H - y) * PT; }
+  var neonCm = (pr.profile.widthMm || 8) / 10;
+  for (var i = 0; i < pr.paths.length; i++) {
+    var path = pr.paths[i];
+    if (!path.points || path.points.length < 2 || path.hidden) continue;
+    var color = path.color || PALETTE[i % PALETTE.length];
+    var rgb = hexRGB(color);
+    o.push(rgb[0] + ' ' + rgb[1] + ' ' + rgb[2] + ' setrgbcolor ' + (neonCm * 0.9 * PT) + ' setlinewidth');
+    var segs = pathSegs(path);
+    o.push((segs[0].a.x * PT) + ' ' + Y(segs[0].a.y) + ' m');
+    for (var j = 0; j < segs.length; j++) {
+      var sg = segs[j];
+      if (sg.c1) {
+        o.push((sg.c1.x * PT) + ' ' + Y(sg.c1.y) + ' ' + (sg.c2.x * PT) + ' ' + Y(sg.c2.y) + ' ' + (sg.b.x * PT) + ' ' + Y(sg.b.y) + ' c');
+      } else {
+        o.push((sg.b.x * PT) + ' ' + Y(sg.b.y) + ' l');
+      }
+    }
+    o.push('s');
+  }
+  o.push('showpage');
+  o.push('%%EOF');
+  download(safeName() + '.eps', o.join(String.fromCharCode(10)), 'application/postscript');
+  setStatus('EPS exported (vector, opens in CorelDRAW / Illustrator).', 'ok');
+}
+function hexRGB(hex) {
+  var h = String(hex || '#22d3ee').replace('#', '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var r = parseInt(h.substring(0, 2), 16) / 255, g = parseInt(h.substring(2, 4), 16) / 255, b = parseInt(h.substring(4, 6), 16) / 255;
+  if (isNaN(r)) r = 0.13; if (isNaN(g)) g = 0.83; if (isNaN(b)) b = 0.93;
+  return [Math.round(r * 1000) / 1000, Math.round(g * 1000) / 1000, Math.round(b * 1000) / 1000];
+}
+
+/* =========================================================================
    PROFESSIONAL EXAMPLES / IMAGE TRACE / DOUBLE-LINE CUT CHANNEL
    ========================================================================= */
 function emptyProject() {
@@ -3049,6 +4485,8 @@ function emptyProject() {
   d.paths = []; d.texts = [];
   d.name = 'New Project';
   d.settings.channelMm = 10;
+  d.settings.shapeSides = 5; d.settings.starInner = 45;
+  d.settings.spiralTurns = 3; d.settings.dblGapCm = 4;
   return d;
 }
 function wrapGeoms(geoms) {
@@ -3143,33 +4581,126 @@ function geomSmiley(cx, cy, r) {
   return out;
 }
 
-/* ---- raster (image / text) -> neon centerline geoms ---- */
+/* ---- raster (image / text) -> neon geoms, v2: centerline OR outline mode ---- */
 function rasterToGeoms(rgba, w, h, opts) {
   opts = opts || {};
-  var bin = binarize(rgba, w, h, opts.threshold || 128, !!opts.invert);
+  var mode = opts.mode || 'center';
+  var bin = binarize(rgba, w, h,
+    (opts.threshold === undefined || opts.threshold === null) ? 'auto' : opts.threshold,
+    !!opts.invert);
+  if (opts.despeckle) bin = removeSmallComponents(bin, w, h, opts.despeckle * opts.despeckle);
+  if (mode === 'outline') {
+    var loops = traceContours(bin, w, h);
+    return loopsToGeoms(loops, {
+      eps: opts.eps === undefined ? 1.2 : opts.eps,
+      smooth: opts.smooth !== false,
+      minLenPx: opts.minLenPx === undefined ? 8 : opts.minLenPx
+    });
+  }
   var skel = zhangSuen(bin, w, h);
+  if (opts.prune) skel = pruneSpurs(skel, w, h, opts.prune);
   var chains = traceSkeleton(skel, w, h, opts.minLenPx || 5);
+  chains = extendChainEnds(chains, bin, skel, w, h, 12); /* Zhang-Suen erodes tips — grow them back */
   return chainsToPaths(chains, {
     eps: opts.eps === undefined ? 1.2 : opts.eps,
     smooth: opts.smooth !== false
   });
 }
 function textToNeonGeoms(text, fontPx) {
-  try {
-    var cv = document.createElement('canvas');
-    cv.width = 1200; cv.height = 420;
-    var ctx = cv.getContext('2d');
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 1200, 420);
-    ctx.fillStyle = '#000000';
-    ctx.font = 'bold ' + (fontPx || 280) + 'px Tahoma, Arial, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    try { ctx.direction = 'rtl'; } catch (e) { }
-    ctx.fillText(text, 600, 210);
-    var data = ctx.getImageData(0, 0, 1200, 420).data;
-    return rasterToGeoms(data, 1200, 420, { threshold: 128, invert: false, eps: 2.0, smooth: true, minLenPx: 10 });
-  } catch (e) {
-    return [];
+  /* legacy helper kept for compatibility — single line, centerline mode */
+  return textNeonGeoms(text, { sizeCm: (fontPx || 280) / 14, pxPerCm: 14, mode: 'center', bold: true });
+}
+/*
+  textNeonGeoms — REAL neon text (not a note).
+  Renders the text with the browser font engine (Persian/Arabic shaping works),
+  then vectorizes it:
+    mode 'center'  -> one neon line on the stroke axis of every letter
+    mode 'outline' -> neon follows BOTH edges of every stroke (double-line look)
+  Returns geoms in cm, normalized so the text block starts at (0,0).
+*/
+function textNeonGeoms(text, o) {
+  o = o || {};
+  text = String(text === undefined || text === null ? '' : text);
+  if (!text.trim()) return [];
+  var pxPerCm = o.pxPerCm || 14;
+  var sizeCm = Math.max(0.5, o.sizeCm || 20);
+  var fontPx = Math.max(10, Math.round(sizeCm * pxPerCm));
+  var fam = String(o.family || 'Tahoma').split('"').join('');
+  var font = (o.italic ? 'italic ' : '') + (o.bold ? 'bold ' : '') + fontPx +
+    'px "' + fam + '", Tahoma, Arial, sans-serif';
+  var spacing = Math.round(((o.spacing || 0) / 100) * fontPx); /* percent of font size -> px */
+  var cv = document.createElement('canvas');
+  var ctx = cv.getContext('2d');
+  ctx.font = font;
+  try { ctx.letterSpacing = spacing + 'px'; } catch (e) { }
+  var met = ctx.measureText(text);
+  var asc = met.actualBoundingBoxAscent || fontPx * 0.85;
+  var desc = met.actualBoundingBoxDescent || fontPx * 0.25;
+  var w = Math.min(5000, Math.max(16, Math.ceil(met.width + fontPx * 0.5)));
+  var h = Math.min(5000, Math.max(16, Math.ceil(asc + desc + fontPx * 0.5)));
+  cv.width = w; cv.height = h;
+  ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+  ctx.font = font;
+  try { ctx.letterSpacing = spacing + 'px'; } catch (e) { }
+  try { ctx.direction = (o.rtl === false) ? 'ltr' : 'auto'; } catch (e) { }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000000';
+  ctx.fillText(text, w / 2, h / 2);
+  if (o.thicken) {
+    ctx.lineWidth = fontPx * 0.05; ctx.lineJoin = 'round'; ctx.strokeText(text, w / 2, h / 2);
   }
+  var data = ctx.getImageData(0, 0, w, h).data;
+  var mode = o.mode === 'outline' ? 'outline' : 'center';
+  var geoms = rasterToGeoms(data, w, h, {
+    mode: mode,
+    threshold: 'auto',
+    eps: Math.max(1.1, pxPerCm * 0.12),
+    smooth: o.smooth !== false,
+    minLenPx: mode === 'outline' ? pxPerCm * 0.5 : 8,
+    despeckle: 2,
+    prune: mode === 'center' ? 3 : 0
+  });
+  /* px -> cm, then normalize to origin (0,0) */
+  var cmPerPx = 1 / pxPerCm, i, j;
+  for (i = 0; i < geoms.length; i++) {
+    for (j = 0; j < geoms[i].points.length; j++) {
+      geoms[i].points[j].x *= cmPerPx; geoms[i].points[j].y *= cmPerPx;
+    }
+    if (geoms[i].ctrl) for (var c = 0; c < geoms[i].ctrl.length; c++) {
+      var cc = geoms[i].ctrl[c];
+      if (!cc) continue;
+      cc.c1.x *= cmPerPx; cc.c1.y *= cmPerPx; cc.c2.x *= cmPerPx; cc.c2.y *= cmPerPx;
+    }
+  }
+  var bb = geomsBBox(geoms);
+  if (bb) for (i = 0; i < geoms.length; i++) {
+    for (j = 0; j < geoms[i].points.length; j++) {
+      geoms[i].points[j].x -= bb.minX; geoms[i].points[j].y -= bb.minY;
+    }
+    if (geoms[i].ctrl) for (var c2 = 0; c2 < geoms[i].ctrl.length; c2++) {
+      var cc2 = geoms[i].ctrl[c2];
+      if (!cc2) continue;
+      cc2.c1.x -= bb.minX; cc2.c1.y -= bb.minY; cc2.c2.x -= bb.minX; cc2.c2.y -= bb.minY;
+    }
+  }
+  for (i = 0; i < geoms.length; i++) geoms[i].note = (mode === 'outline' ? 'TEXT-2L: ' : 'TEXT: ') + text.slice(0, 24);
+  return geoms;
+}
+/* bbox of a geometry list */
+function geomsBBox(geoms) {
+  var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9, i, j;
+  for (i = 0; i < geoms.length; i++) {
+    for (j = 0; j < geoms[i].points.length; j++) {
+      var p = geoms[i].points[j];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (minX > maxX) return null;
+  return { minX: minX, minY: minY, maxX: maxX, maxY: maxY, w: maxX - minX, h: maxY - minY };
 }
 function fitGeomsInto(geoms, bx, by, bw, bh) {
   if (!geoms.length) return;
@@ -3206,10 +4737,10 @@ function demoShapesProject() {
 function demoCafeProject() {
   var pr = emptyProject();
   pr.name = 'PRO — Cafe Sign (circle + نئون)';
-  pr.texts = [{ id: newId(), x: 6, y: 8, text: 'PRO EXAMPLE — circle + Persian text + shapes', sizeCm: 2.6 }];
+  pr.texts = [{ id: newId(), x: 6, y: 8, text: 'PRO EXAMPLE — circle + Persian neon text + shapes', sizeCm: 2.6 }];
   var geoms = [];
   geoms.push(geomCircle(52, 52, 30));
-  var tg = textToNeonGeoms('نئون', 300);
+  var tg = textNeonGeoms('نئون', { sizeCm: 21, family: 'Tahoma', bold: true, mode: 'center' });
   fitGeomsInto(tg, 52 - 20, 52 - 11, 40, 22);
   geoms = geoms.concat(tg);
   geoms.push(geomStar(112, 30, 15, 6.5));
@@ -3220,11 +4751,31 @@ function demoCafeProject() {
   pr.paths = wrapGeoms(geoms);
   return pr;
 }
+/* double-line neon text showcase: outline (2 tubes around every stroke) + a double-lined circle */
+function demoDoubleProject() {
+  var pr = emptyProject();
+  pr.name = 'PRO — Double-Line Text (دو خطی)';
+  pr.texts = [{ id: newId(), x: 6, y: 8, text: 'PRO EXAMPLE — double-line (outline) neon text + double-lined ring', sizeCm: 2.6 }];
+  var geoms = [];
+  var en = textNeonGeoms('NEON', { sizeCm: 24, family: 'Impact', bold: false, mode: 'outline' });
+  fitGeomsInto(en, 12, 26, 108, 30);
+  geoms = geoms.concat(en);
+  var fa = textNeonGeoms('تابلو', { sizeCm: 18, family: 'Tahoma', bold: true, mode: 'center' });
+  fitGeomsInto(fa, 12, 62, 80, 22);
+  geoms = geoms.concat(fa);
+  /* double-lined ring: two concentric circles */
+  geoms.push(geomCircle(160, 46, 26));
+  geoms.push(geomCircle(160, 46, 21.5));
+  geoms.push(geomStar(160, 46, 8.5, 3.8));
+  pr.paths = wrapGeoms(geoms);
+  return pr;
+}
 function loadExample(key) {
   pushUndo();
   if (key === 'chain') S.project = demoProject();
   else if (key === 'shapes') S.project = demoShapesProject();
   else if (key === 'cafe') S.project = demoCafeProject();
+  else if (key === 'double') S.project = demoDoubleProject();
   else S.project = emptyProject();
   S.sel = [];
   syncPropsFromProject();
@@ -3262,6 +4813,7 @@ function exportCutSvg() {
   var a = ['<rect x="0" y="0" width="' + fnum(W) + '" height="' + fnum(H) + '" fill="none" stroke="#bbbbbb" stroke-width="0.2"/>'];
   var incCenter = $('chkCutCenter') && $('chkCutCenter').checked;
   for (var i = 0; i < pr.paths.length; i++) {
+    if (pr.paths[i].hidden) continue;
     var ch = channelForPath(pr.paths[i]);
     if (!ch) continue;
     a.push(polylineSvg(ch.left, 'CUT1', '#000000'));
@@ -3289,6 +4841,7 @@ function exportCutDxf() {
   push('0'); push('SECTION'); push('2'); push('ENTITIES');
   var incCenter = $('chkCutCenter') && $('chkCutCenter').checked;
   for (var i = 0; i < pr.paths.length; i++) {
+    if (pr.paths[i].hidden) continue;
     var ch = channelForPath(pr.paths[i]);
     if (!ch) continue;
     var sides = [['CUT1', ch.left], ['CUT2', ch.right]];
@@ -3307,11 +4860,14 @@ function exportCutDxf() {
 }
 
 /* ---- trace image modal ---- */
-var TRACE = { img: null };
+/* ---- trace image modal (v2: WYSIWYG, centerline OR outline/double-line) ---- */
+var TRACE = { img: null, res: null, geoms: null, dirty: true, busy: false, timer: null };
 function openTraceFromImage(img) {
   TRACE.img = img;
+  TRACE.geoms = null;
+  TRACE.dirty = true;
   $('modalTrace').classList.remove('hidden');
-  updateTracePreview();
+  traceCompute();
 }
 function traceScaledData(maxDim) {
   var img = TRACE.img;
@@ -3325,30 +4881,67 @@ function traceScaledData(maxDim) {
   return { data: ctx.getImageData(0, 0, w, h).data, w: w, h: h };
 }
 function traceOpts() {
+  var auto = $('traceAuto') ? $('traceAuto').checked : true;
   return {
-    threshold: parseFloat($('traceThresh').value),
+    mode: ($('traceMode') && $('traceMode').value) || 'center',
+    threshold: auto ? 'auto' : parseFloat($('traceThresh').value),
     invert: $('traceInvert').checked,
     eps: Math.max(0.4, parseFloat($('traceDetail').value) / 4),
     smooth: $('traceSmooth').checked,
+    despeckle: parseInt($('traceNoise').value, 10) || 0,
+    prune: ($('traceMode') && $('traceMode').value === 'outline') ? 0 : 3,
     minLenPx: 5
   };
 }
-function updateTracePreview() {
-  if (!TRACE.img) return;
-  try {
-    var t = traceScaledData(320);
-    var geoms = rasterToGeoms(t.data, t.w, t.h, traceOpts());
-    var cv = $('traceCv');
-    var w = 360, h = Math.max(60, Math.round(360 * t.h / t.w));
-    cv.width = w; cv.height = h;
-    var ctx = cv.getContext('2d');
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (var g = 0; g < geoms.length; g++) {
-      traceGeomPx(ctx, geoms[g], t.w, t.h, w, h);
+function traceStatus(msg, cls) {
+  var el = $('traceStatus');
+  if (el) { el.innerHTML = msg; el.className = cls || ''; }
+}
+function scheduleTrace() {
+  TRACE.dirty = true;
+  if (TRACE.timer) clearTimeout(TRACE.timer);
+  TRACE.timer = setTimeout(traceCompute, 200);
+}
+function traceCompute() {
+  if (!TRACE.img || TRACE.busy) return;
+  TRACE.busy = true;
+  traceStatus('⏳ Processing — binarize + ' +
+    (($('traceMode') && $('traceMode').value === 'outline') ? 'outline trace…' : 'skeletonize…'));
+  setTimeout(function () {
+    try {
+      var maxDim = parseInt($('traceQuality').value, 10) || 900;
+      var t = traceScaledData(maxDim);
+      TRACE.res = { w: t.w, h: t.h };
+      TRACE.geoms = rasterToGeoms(t.data, t.w, t.h, traceOpts());
+      TRACE.dirty = false;
+      drawTracePreview();
+      traceStatus('✔ <b>' + TRACE.geoms.length + '</b> neon path(s) — ' +
+        t.w + '×' + t.h + ' px — preview = exact result', 'ok');
+    } catch (e) {
+      traceStatus('Error: ' + esc(e.message), 'err');
     }
-  } catch (e) {
-    setStatus('Trace preview error: ' + e.message, 'err');
+    TRACE.busy = false;
+  }, 30);
+}
+function drawTracePreview() {
+  if (!TRACE.img || !TRACE.geoms) return;
+  var t = TRACE.res;
+  var cv = $('traceCv');
+  var maxW = 380, maxH = 400;
+  var w = maxW, h = Math.max(80, Math.round(maxW * t.h / t.w));
+  if (h > maxH) { h = maxH; w = Math.max(80, Math.round(maxH * t.w / t.h)); }
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+  /* dimmed original underlay */
+  try {
+    ctx.globalAlpha = 0.18;
+    ctx.drawImage(TRACE.img, 0, 0, w, h);
+    ctx.globalAlpha = 1;
+  } catch (e) { }
+  ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (var g = 0; g < TRACE.geoms.length; g++) {
+    traceGeomPx(ctx, TRACE.geoms[g], t.w, t.h, w, h);
   }
 }
 function traceGeomPx(ctx, gm, sw, sh, dw, dh) {
@@ -3373,27 +4966,149 @@ function traceGeomPx(ctx, gm, sw, sh, dw, dh) {
   }
 }
 function applyTrace() {
-  try {
-    var t = traceScaledData(600);
-    var geoms = rasterToGeoms(t.data, t.w, t.h, traceOpts());
-    fitPathsToBoard(geoms, S.project.board.widthCm, S.project.board.heightCm, 0.06);
-    var minLen = parseFloat($('traceMinLen').value) || 3;
-    var keep = [];
-    for (var i = 0; i < geoms.length; i++) {
-      var L = 0, pts = geoms[i].points;
-      for (var j = 1; j < pts.length; j++) L += dist(pts[j - 1], pts[j]);
-      if (L >= minLen) keep.push(geoms[i]);
+  if (!TRACE.img) return;
+  var run = function () {
+    try {
+      var geoms = TRACE.geoms;
+      if (!geoms || !geoms.length) { traceStatus('Nothing traced — adjust the settings.', 'warn'); return; }
+      geoms = geoms.map(function (g) {
+        return { type: g.type, closed: g.closed, points: JSON.parse(JSON.stringify(g.points)), ctrl: g.ctrl ? JSON.parse(JSON.stringify(g.ctrl)) : null };
+      });
+      fitPathsToBoard(geoms, S.project.board.widthCm, S.project.board.heightCm, 0.06);
+      var minLen = parseFloat($('traceMinLen').value) || 0;
+      var keep = [];
+      for (var i = 0; i < geoms.length; i++) {
+        var L = 0, pts = geoms[i].points;
+        for (var j = 1; j < pts.length; j++) L += dist(pts[j - 1], pts[j]);
+        if (L >= minLen) keep.push(geoms[i]);
+      }
+      pushUndo();
+      var wrapped = wrapGeoms(keep);
+      for (var k = 0; k < wrapped.length; k++) S.project.paths.push(wrapped[k]);
+      $('modalTrace').classList.add('hidden');
+      recompute();
+      setStatus('Traced ' + wrapped.length + ' neon path(s) from image (' +
+        (($('traceMode') && $('traceMode').value === 'outline') ? 'OUTLINE / double-line' : 'centerline') +
+        ') — lengths corrected to the ' + fmt(S.project.profile.intervalCm) +
+        ' cm cutting grid. Use CUT DXF for the machine.', 'ok');
+    } catch (e) {
+      setStatus('Trace failed: ' + e.message, 'err');
     }
-    pushUndo();
-    var wrapped = wrapGeoms(keep);
-    for (var k = 0; k < wrapped.length; k++) S.project.paths.push(wrapped[k]);
-    $('modalTrace').classList.add('hidden');
-    recompute();
-    setStatus('Traced ' + wrapped.length + ' neon path(s) from image — lengths corrected to the ' +
-      fmt(S.project.profile.intervalCm) + ' cm cutting grid. Use CUT DXF for the machine.', 'ok');
-  } catch (e) {
-    setStatus('Trace failed: ' + e.message, 'err');
+  };
+  if (TRACE.dirty || !TRACE.geoms) {
+    if (TRACE.busy) { traceStatus('Still processing — try again in a moment.', 'warn'); return; }
+    traceCompute();
+    /* traceCompute is async; poll until done */
+    var wait = setInterval(function () {
+      if (!TRACE.busy) { clearInterval(wait); run(); }
+    }, 120);
+  } else run();
+}
+
+/* =========================================================================
+   TEXT TOOL — real neon text (CorelDRAW artistic-text style) or plain label
+   ========================================================================= */
+var TXT = { timer: null };
+function openTextDialog() {
+  $('modalText').classList.remove('hidden');
+  $('txtInput').value = '';
+  try { $('txtInput').focus(); } catch (e) { }
+  updateTextPreview();
+}
+function textDialogOpts() {
+  var fam = $('txtFont').value;
+  if (fam === '__custom__') fam = $('txtFontCustom').value || 'Tahoma';
+  return {
+    text: $('txtInput').value,
+    family: fam,
+    sizeCm: Math.max(1, num($('txtSize').value, 20)),
+    bold: $('txtBold').checked,
+    italic: $('txtItalic').checked,
+    spacing: num($('txtSpacing').value, 0),
+    mode: $('txtMode').value,           /* 'center' | 'outline' */
+    thicken: $('txtThicken').checked
+  };
+}
+function updateTextPreview() {
+  var o = textDialogOpts();
+  var cv = $('txtPreview');
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0e141c'; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!o.text || !o.text.trim()) {
+    ctx.fillStyle = '#8fa3b8'; ctx.font = '12px sans-serif';
+    ctx.fillText('متن را بنویسید… (فارسی / English)', 12, 24);
+    return;
   }
+  /* render the raw raster exactly like the tracer will see it */
+  var fontPx = 120;
+  var font = (o.italic ? 'italic ' : '') + (o.bold ? 'bold ' : '') + fontPx +
+    'px "' + String(o.family).split('"').join('') + '", Tahoma, Arial, sans-serif';
+  var c2 = document.createElement('canvas');
+  var x2 = c2.getContext('2d');
+  x2.font = font;
+  try { x2.letterSpacing = Math.round((o.spacing / 100) * fontPx) + 'px'; } catch (e) { }
+  var met = x2.measureText(o.text);
+  var w = Math.max(10, Math.ceil(met.width + 40)), h = 190;
+  c2.width = Math.min(4000, w); c2.height = h;
+  x2 = c2.getContext('2d');
+  x2.fillStyle = '#fff'; x2.fillRect(0, 0, c2.width, c2.height);
+  x2.font = font;
+  try { x2.letterSpacing = Math.round((o.spacing / 100) * fontPx) + 'px'; } catch (e) { }
+  try { x2.direction = 'auto'; } catch (e) { }
+  x2.fillStyle = '#000'; x2.textAlign = 'center'; x2.textBaseline = 'middle';
+  x2.fillText(o.text, c2.width / 2, h / 2);
+  if (o.thicken) { x2.lineWidth = 5; x2.strokeText(o.text, c2.width / 2, h / 2); }
+  var sc = Math.min(cv.width / c2.width, (cv.height - 10) / c2.height);
+  ctx.fillStyle = '#ffffff';
+  ctx.drawImage(c2, (cv.width - c2.width * sc) / 2, (cv.height - c2.height * sc) / 2, c2.width * sc, c2.height * sc);
+  ctx.fillStyle = '#34d399'; ctx.font = '11px sans-serif';
+  ctx.fillText((o.mode === 'outline' ? 'OUTLINE / دو خطی — neon traces both edges of every stroke'
+    : 'CENTERLINE / تک‌خط — one neon tube on the stroke axis'), 12, cv.height - 8);
+}
+function scheduleTextPreview() {
+  if (TXT.timer) clearTimeout(TXT.timer);
+  TXT.timer = setTimeout(updateTextPreview, 200);
+}
+function applyTextDialog() {
+  var o = textDialogOpts();
+  if (!o.text || !o.text.trim()) { setStatus('Type some text first.', 'warn'); return; }
+  if ($('txtAsLabel').checked) {
+    pushUndo();
+    var at = S.textAt || { x: S.project.board.widthCm / 2, y: S.project.board.heightCm / 2 };
+    S.project.texts.push({ id: newId(), x: at.x, y: at.y, text: o.text, sizeCm: Math.min(10, Math.max(1, o.sizeCm / 4)) });
+    $('modalText').classList.add('hidden');
+    recompute();
+    setStatus('Label added (note only — not neon). Untick "label only" for real neon text.', '');
+    return;
+  }
+  var geoms = textNeonGeoms(o.text, {
+    family: o.family, sizeCm: o.sizeCm, bold: o.bold, italic: o.italic,
+    spacing: o.spacing, mode: o.mode, thicken: o.thicken, pxPerCm: 14
+  });
+  if (!geoms.length) { setStatus('Text trace failed — try another font or size.', 'err'); return; }
+  pushUndo();
+  var B = S.project.board;
+  var bb = geomsBBox(geoms);
+  /* scale down if wider than the board */
+  var maxW = B.widthCm * 0.94, maxH = B.heightCm * 0.9;
+  if (bb && (bb.w > maxW || bb.h > maxH)) {
+    var f = Math.min(maxW / bb.w, maxH / bb.h);
+    xformGeoms(geoms, matScale(f, f));
+    bb = geomsBBox(geoms);
+  }
+  /* place: at the click point (centered) or centered on the board */
+  var tx, ty;
+  if (S.textAt) { tx = S.textAt.x - bb.w / 2 - bb.minX; ty = S.textAt.y - bb.h / 2 - bb.minY; }
+  else { tx = (B.widthCm - bb.w) / 2 - bb.minX; ty = (B.heightCm - bb.h) / 2 - bb.minY; }
+  xformGeoms(geoms, matTranslate(tx, ty));
+  var wrapped = wrapGeoms(geoms);
+  var ids = [];
+  for (var i = 0; i < wrapped.length; i++) { S.project.paths.push(wrapped[i]); ids.push(wrapped[i].id); }
+  S.sel = ids;
+  $('modalText').classList.add('hidden');
+  recompute();
+  setStatus('Neon text "' + o.text.slice(0, 20) + '" created: ' + wrapped.length + ' path(s) — ' +
+    (o.mode === 'outline' ? 'double-line outline' : 'centerline') + '. Lengths snap to the cutting grid.', 'ok');
 }
 
 function openHelp() {
@@ -3434,6 +5149,25 @@ function bindEvents() {
     setStatus('Path direction reversed.', 'ok');
   });
   $('toolDelete').addEventListener('click', deleteSelected);
+  $('toolDup').addEventListener('click', duplicateSelection);
+  $('toolCopy').addEventListener('click', copySelection);
+  $('toolPaste').addEventListener('click', pasteClipboard);
+  $('toolAlign').addEventListener('click', function () { $('modalAlign').classList.remove('hidden'); });
+  $('toolFront').addEventListener('click', function () { orderSelection('front'); });
+  $('toolBack').addEventListener('click', function () { orderSelection('back'); });
+  $('toolFlipH').addEventListener('click', function () { flipSelection(true); });
+  $('toolFlipV').addEventListener('click', function () { flipSelection(false); });
+  $('toolWeld').addEventListener('click', function () { booleanSelection('weld'); });
+  $('toolTrim').addEventListener('click', function () { booleanSelection('trim'); });
+  $('toolIntersect').addEventListener('click', function () { booleanSelection('intersect'); });
+  $('toolDblLine').addEventListener('click', function () {
+    if (!S.sel.length) { setStatus('Double Line: select path(s) first.', 'warn'); return; }
+    var keep = window.confirm('DOUBLE LINE: two parallel neon lines only?  [OK = two lines / Cancel = also keep the centerline]');
+    doubleLineSelection(keep);
+  });
+  $('toolZoomIn').addEventListener('click', function () { zoomStep(1.25); });
+  $('toolZoomOut').addEventListener('click', function () { zoomStep(1 / 1.25); });
+  $('toolZoomFit').addEventListener('click', zoomFit);
 
   /* topbar */
   $('btnMode').addEventListener('click', function () {
@@ -3459,6 +5193,9 @@ function bindEvents() {
   $('expCutDxf').addEventListener('click', exportCutDxf);
   $('expCutSvg').addEventListener('click', exportCutSvg);
   $('btnTrace').addEventListener('click', function () { $('imgInput').click(); });
+  $('toolTrace2').addEventListener('click', function () { $('imgInput').click(); });
+  $('btnNeonText').addEventListener('click', function () { S.textAt = null; openTextDialog(); });
+  $('expEps').addEventListener('click', exportEPS);
   $('imgInput').addEventListener('change', function (ev) {
     var file = ev.target.files && ev.target.files[0];
     if (!file) return;
@@ -3472,10 +5209,10 @@ function bindEvents() {
     reader.readAsText ? reader.readAsDataURL(file) : reader.readAsDataURL(file);
     ev.target.value = '';
   });
-  var traceIds = ['traceThresh', 'traceDetail', 'traceInvert', 'traceSmooth'];
+  var traceIds = ['traceThresh', 'traceDetail', 'traceInvert', 'traceSmooth', 'traceMode', 'traceAuto', 'traceNoise', 'traceQuality'];
   for (var ti = 0; ti < traceIds.length; ti++) {
-    $(traceIds[ti]).addEventListener('input', updateTracePreview);
-    $(traceIds[ti]).addEventListener('change', updateTracePreview);
+    $(traceIds[ti]).addEventListener('input', scheduleTrace);
+    $(traceIds[ti]).addEventListener('change', scheduleTrace);
   }
   $('traceCancel').addEventListener('click', function () {
     $('modalTrace').classList.add('hidden');
@@ -3527,7 +5264,8 @@ function bindEvents() {
 
   /* props */
   var propIds = ['projName', 'propWidth', 'propHeight', 'propNeonW', 'propInterval', 'propBend', 'propVolt',
-    'propPower', 'propRoll', 'propMaxPiece', 'propSpacing', 'propSafety', 'propPsu', 'propGrid', 'propNodeTol', 'propChannel', 'profName'];
+    'propPower', 'propRoll', 'propMaxPiece', 'propSpacing', 'propSafety', 'propPsu', 'propGrid', 'propNodeTol', 'propChannel', 'profName',
+    'propSides', 'propStarInner', 'propSpiral', 'propDblGap'];
   for (var p = 0; p < propIds.length; p++) {
     $(propIds[p]).addEventListener('change', function () {
       pushUndo(); readProps(); recompute();
@@ -3599,6 +5337,7 @@ function bindEvents() {
         $('tabCut').style.display = el.getAttribute('data-tab') === 'cut' ? '' : 'none';
         $('tabMat').style.display = el.getAttribute('data-tab') === 'mat' ? '' : 'none';
         $('tabRoll').style.display = el.getAttribute('data-tab') === 'roll' ? '' : 'none';
+        $('tabObj').style.display = el.getAttribute('data-tab') === 'obj' ? '' : 'none';
       });
     })(tabEls[t]);
   }
@@ -3618,6 +5357,74 @@ function bindEvents() {
       showOpenList();
     }
   });
+
+  /* neon text modal */
+  var txtIds = ['txtInput', 'txtFont', 'txtFontCustom', 'txtSize', 'txtBold', 'txtItalic', 'txtSpacing', 'txtMode', 'txtThicken'];
+  for (var tx = 0; tx < txtIds.length; tx++) {
+    $(txtIds[tx]).addEventListener('input', scheduleTextPreview);
+    $(txtIds[tx]).addEventListener('change', scheduleTextPreview);
+  }
+  $('txtInput').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); applyTextDialog(); }
+  });
+  $('txtCancel').addEventListener('click', function () { $('modalText').classList.add('hidden'); });
+  $('txtApply').addEventListener('click', applyTextDialog);
+
+  /* align & distribute modal */
+  var alignBtns = document.querySelectorAll('#modalAlign [data-align]');
+  for (var ab = 0; ab < alignBtns.length; ab++) {
+    (function (btn) {
+      btn.addEventListener('click', function () { alignSelection(btn.getAttribute('data-align')); });
+    })(alignBtns[ab]);
+  }
+  $('distH').addEventListener('click', function () { distributeSelection('h'); });
+  $('distV').addEventListener('click', function () { distributeSelection('v'); });
+  $('btnCloseAlign').addEventListener('click', function () { $('modalAlign').classList.add('hidden'); });
+
+  /* objects manager */
+  $('objBody').addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t) return;
+    var id = t.getAttribute('data-id');
+    if (t.classList.contains('obj-eye') && id) {
+      var pe = findPath(id);
+      if (pe) {
+        pe.hidden = !pe.hidden;
+        if (pe.hidden) S.sel = S.sel.filter(function (q3) { return q3 !== id; });
+        recompute();
+      }
+    } else if (t.classList.contains('obj-lock') && id) {
+      var pl = findPath(id);
+      if (pl) { pl.locked = !pl.locked; recompute(); }
+    } else if (t.classList.contains('obj-del') && id) {
+      pushUndo();
+      S.project.paths = S.project.paths.filter(function (q) { return q.id !== id; });
+      S.sel = S.sel.filter(function (q2) { return q2 !== id; });
+      recompute();
+    } else if (t.classList.contains('obj-name') && id) {
+      S.sel = (ev.shiftKey) ? S.sel.concat([id]) : [id];
+      renderSel(); renderObjects(); draw();
+    }
+  });
+
+  /* transform panel */
+  $('tfApply').addEventListener('click', applyTransformInputs);
+  $('tfRotL').addEventListener('click', function () { rotateSelection(-90); });
+  $('tfRotR').addEventListener('click', function () { rotateSelection(90); });
+  $('tfRot15').addEventListener('click', function () { rotateSelection(15); });
+
+  /* color swatches */
+  var cr = $('colorRow');
+  var swHtml = '';
+  for (var sw = 0; sw < PALETTE.length; sw++) {
+    swHtml += '<button class="swatch" data-color="' + PALETTE[sw] + '" style="background:' + PALETTE[sw] + '" title="' + PALETTE[sw] + '"></button>';
+  }
+  cr.innerHTML = swHtml;
+  cr.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t && t.getAttribute && t.getAttribute('data-color')) setSelectionColor(t.getAttribute('data-color'));
+  });
+  $('colorSet').addEventListener('click', function () { setSelectionColor($('colorCustom').value); });
 
   /* canvas */
   var cv = $('cv');
@@ -3641,7 +5448,9 @@ function bindEvents() {
       if (!$('modalCheck').classList.contains('hidden')) { $('modalCheck').classList.add('hidden'); return; }
       if (!$('modalOpen').classList.contains('hidden')) { $('modalOpen').classList.add('hidden'); return; }
       if (!$('modalTrace').classList.contains('hidden')) { $('modalTrace').classList.add('hidden'); return; }
-      S.draft = null; S.measure = null;
+      if (!$('modalText').classList.contains('hidden')) { $('modalText').classList.add('hidden'); return; }
+      if (!$('modalAlign').classList.contains('hidden')) { $('modalAlign').classList.add('hidden'); return; }
+      S.draft = null; S.measure = null; S.shapeDraft = null; S.marquee = null;
       setTool('select');
     }
     if (ev.key === 'F1') { ev.preventDefault(); openHelp(); return; }
@@ -3649,10 +5458,21 @@ function bindEvents() {
     if (ev.key === 'Delete' || ev.key === 'Backspace') deleteSelected();
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); doUndo(); }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y') { ev.preventDefault(); doRedo(); }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') { ev.preventDefault(); duplicateSelection(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c') { copySelection(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') { pasteClipboard(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') { ev.preventDefault(); selectAll(); return; }
+    if (ev.key === '+' || ev.key === '=') { zoomStep(1.25); }
+    if (ev.key === '-') { zoomStep(1 / 1.25); }
     if (!ev.ctrlKey && !ev.metaKey) {
-      var map = { v: 'select', p: 'pen', l: 'line', b: 'bezier', t: 'text', s: 'split', m: 'measure' };
+      var map = {
+        v: 'select', p: 'pen', l: 'line', b: 'bezier', t: 'text', s: 'split', m: 'measure',
+        r: 'rect', e: 'ellipse', y: 'polygon', g: 'star', i: 'spiral'
+      };
       var tk = map[ev.key.toLowerCase()];
       if (tk) setTool(tk);
+      if (ev.key.toLowerCase() === 'f') zoomFit();
+      if (ev.key.toLowerCase() === 'x' && S.sel.length) deleteSelected();
     }
   });
   window.addEventListener('keyup', function (ev) {
